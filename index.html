@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <title>Glow Up ✨</title>
+  <meta name="description" content="Agent créateur de contenu Instagram — Glow Up & Sérénité">
+
+  <!-- PWA iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Glow Up ✨">
+
+  <!-- PWA Android -->
+  <meta name="theme-color" content="#0f0c1a">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <!-- Manifest inline via data URI (Android) -->
+  <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Glow%20Up%20%26%20S%C3%A9r%C3%A9nit%C3%A9%22%2C%22short_name%22%3A%22Glow%20Up%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230f0c1a%22%2C%22theme_color%22%3A%22%230f0c1a%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%2520viewBox%3D%270%200%20100%20100%27%253E%253Crect%2520width%3D%27100%27%2520height%3D%27100%27%2520rx%3D%2722%27%2520fill%3D%27%230f0c1a%27%2F%253E%253Ctext%2520y%3D%27.9em%27%2520font-size%3D%2770%27%2520x%3D%2715%27%253E%25E2%259C%25A8%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22192x192%22%7D%5D%7D">
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #0f0c1a; -webkit-tap-highlight-color: transparent; }
+    #root { min-height: 100%; }
+    input, button, textarea { -webkit-appearance: none; font-family: Georgia, serif; }
+    ::-webkit-scrollbar { display: none; }
+    * { scrollbar-width: none; }
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes pulse { 0%,100%{opacity:0.6} 50%{opacity:1} }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useEffect, useCallback } = React;
+
+    // ── CONSTANTS ──────────────────────────────────────────────────────────
+
+    const AUDIENCES = [
+      { id:"ado",    label:"Ado",          sub:"13–17 ans", emoji:"🌱", color:"#7ed4a0", desc:"en quête d'identité" },
+      { id:"jeune",  label:"Jeune adulte", sub:"18–30 ans", emoji:"🔥", color:"#ffa07a", desc:"en train de se construire" },
+      { id:"adulte", label:"Adulte",       sub:"31–55 ans", emoji:"🌿", color:"#a0c4ff", desc:"cherche l'équilibre" },
+      { id:"senior", label:"Senior",       sub:"56+ ans",   emoji:"🌸", color:"#e8b4d8", desc:"redonner du sens" },
+    ];
+
+    const LANG_OPTIONS = [
+      { id:"fr",   label:"🇫🇷 FR" },
+      { id:"en",   label:"🇬🇧 EN" },
+      { id:"both", label:"🌐 FR+EN" },
+    ];
+
+    const FORMATS = {
+      caption:  { label:"Caption",   icon:"✍️" },
+      carousel: { label:"Carrousel", icon:"🎠" },
+      reel:     { label:"Reel",      icon:"🎬" },
+      story:    { label:"Story",     icon:"💫" },
+    };
+
+    const SENSITIVITY_CONFIG = {
+      haute:   { label:"Très sensible", color:"#ff7a5c", dot:"🔴" },
+      moyenne: { label:"Impactant",     color:"#ffc47a", dot:"🟡" },
+      douce:   { label:"Inspirant",     color:"#b4a0e8", dot:"🟣" },
+    };
+
+    // ── API ────────────────────────────────────────────────────────────────
+
+    async function callAPI(system, messages, tokens = 1000) {
+      const key = localStorage.getItem("glowup_api_key");
+      if (!key) throw new Error("NO_KEY");
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": key,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({ model:"claude-haiku-4-5-20251001", max_tokens:tokens, system, messages }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      return data.content?.map(b => b.text || "").join("\n") || "";
+    }
+
+    function parseJSON(raw) {
+      try { return JSON.parse(raw.replace(/```json|```/g,"").trim()); }
+      catch {
+        const m = raw.match(/\{[\s\S]*\}/);
+        if (m) try { return JSON.parse(m[0]); } catch {}
+        return null;
+      }
+    }
+
+    // ── SYSTEM PROMPTS ─────────────────────────────────────────────────────
+
+    const PROPOSAL_SYSTEM = `Tu es un stratège de contenu Instagram expert en développement personnel, glow-up intérieur, sérénité et bienveillance.
+Analyse la tranche d'âge et détecte ce qui est le plus sensible, libérateur ou universellement ressenti : peurs secrètes, espoirs non dits, doutes intérieurs, victoires invisibles, transitions de vie.
+Réponds UNIQUEMENT en JSON valide, sans texte avant ou après :
+{"analysis":"Ta lecture de cette audience en 2 phrases percutantes","proposals":[{"id":1,"theme":"Nom court (4 mots max)","format":"caption","hook":"Accroche d'ouverture (max 12 mots)","rationale":"Pourquoi ce sujet touche cette cible (2 phrases)","sensitivity":"haute"}]}
+Propose exactement 4 idées. format ∈ {caption,carousel,reel,story}. sensitivity ∈ {haute,moyenne,douce}.`;
+
+    const ADJUST_SYSTEM = `Tu es un stratège de contenu Instagram. Modifie la proposition selon la demande et retourne UNIQUEMENT le JSON mis à jour :
+{"id":N,"theme":"...","format":"...","hook":"...","rationale":"...","sensitivity":"..."}`;
+
+    const buildContentSystem = (lang) => `Tu es un créateur de contenu Instagram expert en développement personnel, bienveillance et glow-up intérieur. Univers : sérenité, positivité ancrée, vivre pleinement — on a qu'une vie.
+${lang==="en"?"Write ONLY in English.":lang==="both"?"Write in French first, then add '— — —' and write the same in English.":"Write ONLY in French."}
+CAPTION : 2-5 paragraphes + ligne vide + 15-20 hashtags.
+CARROUSEL : titre principal + 5-7 slides (titre + texte court).
+REEL : Hook (3s) / Scènes clés / Call to action + musique suggérée.
+STORY : 4-5 stories avec type (sondage/question/texte) + contenu exact.
+Sois poétique, percutant, authentique.`;
+
+    const CORRECTION_SYSTEM = `Tu es un créateur de contenu Instagram collaboratif. Modifie uniquement ce que l'utilisateur demande, retourne le contenu complet corrigé, prêt à publier. Reste dans l'univers sérénité/glow-up/bienveillance.`;
+
+    // ── SETUP SCREEN ───────────────────────────────────────────────────────
+
+    function SetupScreen({ onSave }) {
+      const [key, setKey] = useState("");
+      const [error, setError] = useState("");
+      const [testing, setTesting] = useState(false);
+
+      const save = async () => {
+        const trimmed = key.trim().replace(/[\s\u00A0]/g, "");
+        if (!trimmed.startsWith("sk-ant-")) {
+          setError("La clé doit commencer par sk-ant-…");
+          return;
+        }
+        setTesting(true); setError("");
+        try {
+          localStorage.setItem("glowup_api_key", trimmed);
+          await callAPI("You are a helpful assistant.", [{ role:"user", content:"Reply OK" }], 50);
+          onSave();
+        } catch(e) {
+          localStorage.removeItem("glowup_api_key");
+          const msg = e.message || "";
+          if (msg.includes("401") || msg.includes("auth")) setError("❌ Clé refusée. Vérifie qu'elle est bien copiée en entier.");
+          else if (msg.includes("credits") || msg.includes("billing") || msg.includes("402")) setError("❌ Pas de crédits. Ajoute un moyen de paiement sur console.anthropic.com.");
+          else if (msg.includes("NO_KEY")) setError("❌ Clé manquante.");
+          else setError("❌ Erreur : " + (msg.substring(0, 80) || "connexion impossible"));
+        }
+        setTesting(false);
+      };
+
+      return (
+        <div style={{ minHeight:"100vh", background:"linear-gradient(160deg,#0f0c1a,#1a0d18,#120d22)", display:"flex", alignItems:"center", justifyContent:"center", padding:"24px", fontFamily:"Georgia, serif" }}>
+          <div style={{ maxWidth:"380px", width:"100%", animation:"fadeIn 0.5s ease" }}>
+            <div style={{ textAlign:"center", marginBottom:"40px" }}>
+              <div style={{ fontSize:"52px", marginBottom:"16px" }}>✨</div>
+              <h1 style={{ fontSize:"1.8rem", fontWeight:"400", background:"linear-gradient(135deg,#f5e6d0,#ffc47a,#e8a0c0)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", marginBottom:"10px" }}>
+                Glow Up & Sérénité
+              </h1>
+              <p style={{ color:"rgba(245,237,224,0.45)", fontSize:"13px", fontStyle:"italic", lineHeight:"1.7" }}>
+                Agent créateur de contenu Instagram
+              </p>
+            </div>
+
+            <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:"18px", padding:"28px" }}>
+              <div style={{ fontSize:"13px", color:"rgba(245,237,224,0.7)", lineHeight:"1.8", marginBottom:"24px" }}>
+                Pour fonctionner, l'agent a besoin d'une <strong style={{ color:"#ffc47a" }}>clé API Anthropic</strong> personnelle.
+                Elle reste stockée uniquement sur ton téléphone.
+              </div>
+
+              <a href="https://console.anthropic.com/account/keys" target="_blank" rel="noopener" style={{
+                display:"block", textAlign:"center", background:"rgba(200,149,106,0.12)",
+                border:"1px solid rgba(200,149,106,0.35)", borderRadius:"10px",
+                padding:"11px", color:"#c8956a", fontSize:"12px", textDecoration:"none",
+                marginBottom:"20px",
+              }}>
+                🔑 Obtenir ma clé sur console.anthropic.com →
+              </a>
+
+              <div style={{ marginBottom:"16px" }}>
+                <div style={{ fontSize:"10px", letterSpacing:"2px", color:"rgba(245,237,224,0.35)", textTransform:"uppercase", marginBottom:"8px" }}>Ta clé API</div>
+                <input
+                  type="password"
+                  value={key}
+                  onChange={e => { setKey(e.target.value); setError(""); }}
+                  onKeyDown={e => e.key==="Enter" && save()}
+                  placeholder="sk-ant-api03-…"
+                  style={{
+                    width:"100%", background:"rgba(255,255,255,0.06)", border:`1px solid ${error?"rgba(255,100,80,0.5)":"rgba(255,255,255,0.12)"}`,
+                    borderRadius:"10px", padding:"13px 16px", color:"#f5ede0", fontSize:"14px",
+                    outline:"none", fontFamily:"monospace", letterSpacing:"1px",
+                  }}
+                />
+                {error && <div style={{ fontSize:"11px", color:"#ff7a5c", marginTop:"6px" }}>{error}</div>}
+              </div>
+
+              <button onClick={save} disabled={!key.trim() || testing} style={{
+                width:"100%", background: !key.trim() ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg,#c8956a,#e8608a,#9b68c8)",
+                border:"none", borderRadius:"12px", padding:"15px",
+                color: !key.trim() ? "rgba(255,255,255,0.2)" : "#fff",
+                fontSize:"15px", cursor: !key.trim() ? "not-allowed" : "pointer", fontFamily:"Georgia, serif",
+                boxShadow: key.trim() ? "0 8px 32px rgba(200,149,106,0.35)" : "none",
+              }}>
+                {testing ? "Vérification…" : "Commencer ✨"}
+              </button>
+
+              <div style={{ fontSize:"11px", color:"rgba(245,237,224,0.25)", textAlign:"center", marginTop:"14px", lineHeight:"1.7" }}>
+                La clé n'est jamais envoyée ailleurs qu'à Anthropic.<br/>
+                Elle est stockée uniquement sur cet appareil.
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── INSTALL BANNER ─────────────────────────────────────────────────────
+
+    function InstallBanner() {
+      const [visible, setVisible] = useState(false);
+      useEffect(() => {
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+        const isAndroid = /android/i.test(navigator.userAgent);
+        const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+        const dismissed = localStorage.getItem("install_dismissed");
+        if ((isIOS || isAndroid) && !isStandalone && !dismissed) setVisible(true);
+      }, []);
+
+      if (!visible) return null;
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+      return (
+        <div style={{
+          position:"fixed", bottom: "env(safe-area-inset-bottom, 16px)", left:"12px", right:"12px",
+          background:"rgba(26,13,24,0.97)", border:"1px solid rgba(200,149,106,0.4)",
+          borderRadius:"16px", padding:"16px", zIndex:1000,
+          backdropFilter:"blur(20px)", display:"flex", gap:"12px", alignItems:"flex-start",
+          animation:"fadeIn 0.4s ease",
+        }}>
+          <span style={{ fontSize:"22px", flexShrink:0 }}>📲</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:"13px", color:"#ffc47a", fontFamily:"Georgia, serif", marginBottom:"4px" }}>
+              Installer l'appli sur l'écran d'accueil
+            </div>
+            <div style={{ fontSize:"11px", color:"rgba(245,237,224,0.55)", lineHeight:"1.6" }}>
+              {isIOS
+                ? "Appuie sur le bouton Partager (⎙) en bas de Safari, puis « Sur l'écran d'accueil »"
+                : "Appuie sur les 3 points (⋮) en haut de Chrome, puis « Ajouter à l'écran d'accueil »"}
+            </div>
+          </div>
+          <button onClick={() => { localStorage.setItem("install_dismissed","1"); setVisible(false); }} style={{
+            background:"transparent", border:"none", color:"rgba(245,237,224,0.3)",
+            fontSize:"18px", cursor:"pointer", flexShrink:0, lineHeight:1,
+          }}>×</button>
+        </div>
+      );
+    }
+
+    // ── PROPOSAL CARD ──────────────────────────────────────────────────────
+
+    function ProposalCard({ proposal, onValidate, onAdjust, onPass, adjusting, onAdjustSubmit, adjustInput, setAdjustInput, adjustLoading }) {
+      const f = FORMATS[proposal.format] || FORMATS.caption;
+      const s = SENSITIVITY_CONFIG[proposal.sensitivity] || SENSITIVITY_CONFIG.moyenne;
+
+      return (
+        <div style={{
+          background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)",
+          borderLeft:`3px solid ${s.color}`, borderRadius:"16px", padding:"20px",
+          opacity: proposal.passed ? 0.25 : 1, transition:"opacity 0.3s",
+        }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"10px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+              <span style={{ fontSize:"18px" }}>{f.icon}</span>
+              <div>
+                <div style={{ fontSize:"14px", color:"#f5ede0", fontWeight:"600" }}>{proposal.theme}</div>
+                <div style={{ display:"flex", gap:"6px", marginTop:"3px" }}>
+                  <span style={{ fontSize:"10px", background:"rgba(255,255,255,0.08)", borderRadius:"8px", padding:"2px 7px", color:"rgba(245,237,224,0.5)" }}>{f.label}</span>
+                  <span style={{ fontSize:"10px", color:s.color }}>{s.dot} {s.label}</span>
+                </div>
+              </div>
+            </div>
+            {!proposal.passed && (
+              <button onClick={onPass} style={{ background:"transparent", border:"none", color:"rgba(245,237,224,0.2)", fontSize:"18px", cursor:"pointer", lineHeight:1, padding:"0 2px" }}>×</button>
+            )}
+          </div>
+
+          <div style={{ fontStyle:"italic", fontSize:"13px", color:"rgba(245,237,224,0.8)", borderLeft:"2px solid rgba(255,255,255,0.1)", paddingLeft:"12px", marginBottom:"10px", lineHeight:"1.6" }}>
+            "{proposal.hook}"
+          </div>
+          <div style={{ fontSize:"12px", color:"rgba(245,237,224,0.45)", lineHeight:"1.7", marginBottom:"16px" }}>
+            {proposal.rationale}
+          </div>
+
+          {adjusting && (
+            <div style={{ marginBottom:"14px", background:"rgba(255,255,255,0.04)", borderRadius:"12px", padding:"12px" }}>
+              <div style={{ fontSize:"11px", color:"rgba(245,237,224,0.35)", marginBottom:"8px", fontStyle:"italic" }}>
+                Dis-moi ce que tu veux modifier…
+              </div>
+              <div style={{ display:"flex", gap:"8px" }}>
+                <input autoFocus value={adjustInput} onChange={e => setAdjustInput(e.target.value)}
+                  onKeyDown={e => e.key==="Enter" && !adjustLoading && adjustInput.trim() && onAdjustSubmit()}
+                  placeholder="changer le format, adoucir le ton…"
+                  style={{ flex:1, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:"8px", padding:"9px 12px", color:"#f5ede0", fontSize:"12px", outline:"none", fontStyle:"italic" }}
+                />
+                <button onClick={onAdjustSubmit} disabled={adjustLoading || !adjustInput.trim()} style={{
+                  background:"rgba(200,149,106,0.25)", border:"1px solid rgba(200,149,106,0.4)",
+                  borderRadius:"8px", padding:"9px 12px", color:"#c8956a", fontSize:"12px", cursor:"pointer", whiteSpace:"nowrap",
+                }}>{adjustLoading ? "…" : "OK"}</button>
+              </div>
+            </div>
+          )}
+
+          {!proposal.passed && (
+            <div style={{ display:"flex", gap:"8px" }}>
+              <button onClick={onValidate} style={{
+                flex:1, background:"linear-gradient(135deg,rgba(200,149,106,0.22),rgba(200,100,160,0.18))",
+                border:"1px solid rgba(200,149,106,0.45)", borderRadius:"10px",
+                padding:"11px", color:"#ffc47a", fontSize:"13px", cursor:"pointer",
+              }}>✅ Générer</button>
+              <button onClick={onAdjust} style={{
+                background: adjusting ? "rgba(180,100,220,0.18)" : "rgba(255,255,255,0.05)",
+                border:`1px solid ${adjusting ? "rgba(180,100,220,0.45)" : "rgba(255,255,255,0.1)"}`,
+                borderRadius:"10px", padding:"11px 16px",
+                color: adjusting ? "#d4a0e8" : "rgba(245,237,224,0.4)",
+                fontSize:"13px", cursor:"pointer",
+              }}>✏️</button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── CORRECTION CHAT ────────────────────────────────────────────────────
+
+    function CorrectionChat({ content, onUpdate }) {
+      const [messages, setMessages] = useState([]);
+      const [input, setInput] = useState("");
+      const [loading, setLoading] = useState(false);
+      const endRef = useRef(null);
+      useEffect(() => { endRef.current?.scrollIntoView({ behavior:"smooth" }); }, [messages]);
+
+      const send = async () => {
+        if (!input.trim() || loading) return;
+        const text = input.trim();
+        const newMessages = [...messages, { role:"user", content:text }];
+        setMessages(newMessages);
+        setInput(""); setLoading(true);
+        const apiMsgs = newMessages.length === 1
+          ? [{ role:"user", content:`Contenu actuel :\n---\n${content}\n---\n\nDemande : ${text}` }]
+          : newMessages;
+        try {
+          const reply = await callAPI(CORRECTION_SYSTEM, apiMsgs, 1000);
+          setMessages(prev => [...prev, { role:"assistant", content:reply }]);
+          onUpdate(reply);
+        } catch(e) {
+          setMessages(prev => [...prev, { role:"assistant", content:"Erreur. Réessaie !" }]);
+        }
+        setLoading(false);
+      };
+
+      return (
+        <div style={{ marginTop:"16px", background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:"14px", overflow:"hidden" }}>
+          <div style={{ padding:"12px 16px", borderBottom:"1px solid rgba(255,255,255,0.05)", fontSize:"10px", letterSpacing:"2px", color:"rgba(245,237,224,0.35)", textTransform:"uppercase" }}>
+            💬 Correction collaborative
+          </div>
+          {messages.length > 0 && (
+            <div style={{ maxHeight:"160px", overflowY:"auto", padding:"12px 14px", display:"flex", flexDirection:"column", gap:"8px" }}>
+              {messages.map((m,i) => (
+                <div key={i} style={{
+                  alignSelf: m.role==="user" ? "flex-end" : "flex-start",
+                  maxWidth:"85%", background: m.role==="user" ? "rgba(200,149,106,0.18)" : "rgba(255,255,255,0.06)",
+                  border:`1px solid ${m.role==="user"?"rgba(200,149,106,0.3)":"rgba(255,255,255,0.07)"}`,
+                  borderRadius:"10px", padding:"9px 13px",
+                  fontSize:"12px", color:"rgba(245,237,224,0.82)", lineHeight:"1.6",
+                  fontStyle: m.role==="user" ? "italic" : "normal",
+                }}>
+                  {m.role==="assistant" ? "✨ Contenu mis à jour ci-dessus" : m.content}
+                </div>
+              ))}
+              {loading && <div style={{ alignSelf:"flex-start", fontSize:"12px", color:"rgba(245,237,224,0.35)", fontStyle:"italic", padding:"4px" }}>Ajustement en cours…</div>}
+              <div ref={endRef}/>
+            </div>
+          )}
+          <div style={{ padding:"10px 12px", display:"flex", gap:"8px" }}>
+            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key==="Enter" && send()}
+              placeholder="raccourcis, change le ton, refais le slide 2…"
+              style={{
+                flex:1, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)",
+                borderRadius:"10px", padding:"10px 13px", color:"#f5ede0", fontSize:"12px",
+                outline:"none", fontStyle:"italic",
+              }}
+            />
+            <button onClick={send} disabled={!input.trim()||loading} style={{
+              background: input.trim() ? "rgba(200,149,106,0.28)" : "rgba(255,255,255,0.05)",
+              border:`1px solid ${input.trim()?"rgba(200,149,106,0.45)":"rgba(255,255,255,0.08)"}`,
+              borderRadius:"10px", padding:"10px 14px",
+              color: input.trim() ? "#c8956a" : "rgba(245,237,224,0.2)",
+              fontSize:"12px", cursor: input.trim() ? "pointer" : "not-allowed",
+            }}>↑</button>
+          </div>
+        </div>
+      );
+    }
+
+    // ── MAIN AGENT ─────────────────────────────────────────────────────────
+
+    function Agent({ onLogout }) {
+      const [audience, setAudience] = useState(null);
+      const [lang, setLang] = useState("fr");
+      const [phase, setPhase] = useState("setup");
+      const [analysis, setAnalysis] = useState("");
+      const [proposals, setProposals] = useState([]);
+      const [adjustingId, setAdjustingId] = useState(null);
+      const [adjustInput, setAdjustInput] = useState("");
+      const [adjustLoading, setAdjustLoading] = useState(false);
+      const [result, setResult] = useState(null);
+      const [copied, setCopied] = useState(false);
+      const [error, setError] = useState("");
+      const proposalsRef = useRef(null);
+      const resultRef = useRef(null);
+
+      useEffect(() => {
+        if (phase==="proposals") proposalsRef.current?.scrollIntoView({ behavior:"smooth" });
+        if (phase==="result") resultRef.current?.scrollIntoView({ behavior:"smooth" });
+      }, [phase]);
+
+      const analyze = async () => {
+        if (!audience) return;
+        setPhase("analyzing"); setError("");
+        const a = AUDIENCES.find(x => x.id===audience);
+        const prompt = `Audience : ${a.label} (${a.sub}), ${a.desc}. Langue : ${lang==="fr"?"français":lang==="en"?"anglais":"français et anglais"}. Univers : glow-up intérieur, sérénité, bienveillance, vivre pleinement.`;
+        try {
+          const raw = await callAPI(PROPOSAL_SYSTEM, [{ role:"user", content:prompt }], 1000);
+          const parsed = parseJSON(raw);
+          if (parsed?.proposals) {
+            setAnalysis(parsed.analysis || "");
+            setProposals(parsed.proposals.map(p => ({ ...p, passed:false })));
+            setPhase("proposals");
+          } else { throw new Error("Parsing error"); }
+        } catch(e) {
+          setError(e.message || "Erreur. Réessaie !");
+          setPhase("setup");
+        }
+      };
+
+      const submitAdjust = async (proposalId) => {
+        if (!adjustInput.trim()) return;
+        setAdjustLoading(true);
+        const p = proposals.find(x => x.id===proposalId);
+        try {
+          const raw = await callAPI(ADJUST_SYSTEM, [{ role:"user", content:`Proposition : ${JSON.stringify(p)}\nDemande : ${adjustInput}` }], 400);
+          const updated = parseJSON(raw);
+          if (updated) setProposals(prev => prev.map(x => x.id===proposalId ? {...x,...updated,passed:false} : x));
+        } catch(e) {}
+        setAdjustInput(""); setAdjustLoading(false); setAdjustingId(null);
+      };
+
+      const generateContent = async (proposal) => {
+        setPhase("generating");
+        const a = AUDIENCES.find(x => x.id===audience);
+        const f = FORMATS[proposal.format];
+        const prompt = `Crée un contenu Instagram de type "${f?.label}" sur le thème "${proposal.theme}" pour : ${a.label} (${a.sub}).\nAccroche suggérée : "${proposal.hook}"\nUnivers : glow-up intérieur, sérénité, bienveillance.`;
+        try {
+          const content = await callAPI(buildContentSystem(lang), [{ role:"user", content:prompt }], 1000);
+          setResult({ content, format:proposal.format, theme:proposal.theme });
+          setPhase("result");
+        } catch(e) {
+          setError(e.message || "Erreur de génération.");
+          setPhase("proposals");
+        }
+      };
+
+      const a = AUDIENCES.find(x => x.id===audience);
+      const safeBottom = "calc(env(safe-area-inset-bottom, 0px) + 80px)";
+
+      return (
+        <div style={{ minHeight:"100vh", background:"linear-gradient(160deg,#0f0c1a,#1a0d18,#120d22)", fontFamily:"Georgia, serif", color:"#f5ede0" }}>
+          {/* Ambient */}
+          <div style={{ position:"fixed", top:"-15%", right:"-10%", width:"400px", height:"400px", borderRadius:"50%", background:"radial-gradient(circle,rgba(255,140,60,0.08),transparent 70%)", pointerEvents:"none", zIndex:0 }}/>
+          <div style={{ position:"fixed", bottom:"5%", left:"-15%", width:"380px", height:"380px", borderRadius:"50%", background:"radial-gradient(circle,rgba(140,80,200,0.08),transparent 70%)", pointerEvents:"none", zIndex:0 }}/>
+
+          <div style={{ position:"relative", zIndex:1, maxWidth:"600px", margin:"0 auto", padding:`44px 16px ${safeBottom}` }}>
+
+            {/* Header */}
+            <div style={{ textAlign:"center", marginBottom:"36px" }}>
+              <div style={{ fontSize:"10px", letterSpacing:"4px", color:"#c8956a", textTransform:"uppercase", marginBottom:"10px" }}>Agent Créateur</div>
+              <h1 style={{ fontSize:"1.9rem", fontWeight:"400", margin:"0 0 8px", background:"linear-gradient(135deg,#f5e6d0,#ffc47a,#e8a0c0)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
+                Glow Up & Sérénité
+              </h1>
+              <p style={{ color:"rgba(245,237,224,0.38)", fontSize:"12px", fontStyle:"italic" }}>
+                L'agent propose — tu valides ou corriges ✨
+              </p>
+            </div>
+
+            {/* Audience */}
+            <div style={{ marginBottom:"20px" }}>
+              <SLabel>Audience</SLabel>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px" }}>
+                {AUDIENCES.map(au => (
+                  <button key={au.id} onClick={() => { setAudience(au.id); setPhase("setup"); setProposals([]); setResult(null); setError(""); }} style={{
+                    background: audience===au.id ? `${au.color}22` : "rgba(255,255,255,0.04)",
+                    border:`1px solid ${audience===au.id ? au.color+"88":"rgba(255,255,255,0.1)"}`,
+                    borderRadius:"14px", padding:"13px 12px", cursor:"pointer",
+                    color: audience===au.id ? au.color : "rgba(245,237,224,0.55)",
+                    fontSize:"13px", transition:"all 0.2s",
+                    display:"flex", flexDirection:"column", alignItems:"flex-start", gap:"2px",
+                  }}>
+                    <span style={{ display:"flex", gap:"6px", alignItems:"center" }}><span>{au.emoji}</span><span style={{ fontWeight:"600" }}>{au.label}</span></span>
+                    <span style={{ fontSize:"11px", opacity:0.6 }}>{au.sub}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Language */}
+            <div style={{ marginBottom:"24px" }}>
+              <SLabel>Langue</SLabel>
+              <div style={{ display:"flex", gap:"8px" }}>
+                {LANG_OPTIONS.map(l => (
+                  <button key={l.id} onClick={() => setLang(l.id)} style={{
+                    flex:1, background: lang===l.id ? "rgba(200,149,106,0.18)" : "rgba(255,255,255,0.04)",
+                    border:`1px solid ${lang===l.id?"rgba(200,149,106,0.5)":"rgba(255,255,255,0.09)"}`,
+                    borderRadius:"20px", padding:"9px 8px",
+                    cursor:"pointer", color: lang===l.id ? "#ffc47a" : "rgba(245,237,224,0.45)",
+                    fontSize:"12px", transition:"all 0.2s",
+                  }}>{l.label}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div style={{ background:"rgba(255,100,80,0.1)", border:"1px solid rgba(255,100,80,0.3)", borderRadius:"10px", padding:"12px 16px", fontSize:"12px", color:"#ff7a5c", marginBottom:"16px" }}>
+                ⚠️ {error}
+              </div>
+            )}
+
+            {/* CTA */}
+            {(phase==="setup" || phase==="analyzing") && (
+              <div style={{ textAlign:"center", marginBottom:"32px" }}>
+                <button onClick={analyze} disabled={!audience || phase==="analyzing"} style={{
+                  width:"100%", background: !audience ? "rgba(255,255,255,0.06)" : phase==="analyzing" ? "rgba(200,149,106,0.22)" : "linear-gradient(135deg,#c8956a,#e8608a,#9b68c8)",
+                  border:"none", borderRadius:"50px", padding:"17px",
+                  color: !audience ? "rgba(255,255,255,0.2)" : "#fff",
+                  fontSize:"15px", cursor: !audience ? "not-allowed" : "pointer", letterSpacing:"0.5px",
+                  boxShadow: (audience && phase!=="analyzing") ? "0 8px 36px rgba(200,149,106,0.35)" : "none",
+                  transition:"all 0.3s",
+                }}>
+                  {phase==="analyzing" ? (
+                    <span style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:"10px" }}>
+                      <span style={{ display:"inline-block", animation:"spin 1.2s linear infinite" }}>✨</span>
+                      Analyse {a?.label?.toLowerCase()}s en cours…
+                    </span>
+                  ) : proposals.length > 0 ? "↺ Nouvelles propositions" : "✨ Laisser l'agent proposer"}
+                </button>
+                {!audience && <div style={{ fontSize:"11px", color:"rgba(245,237,224,0.22)", marginTop:"8px", fontStyle:"italic" }}>Sélectionne une audience d'abord</div>}
+              </div>
+            )}
+
+            {/* Proposals */}
+            {phase==="proposals" && proposals.length > 0 && (
+              <div ref={proposalsRef} style={{ animation:"fadeIn 0.4s ease" }}>
+                {analysis && (
+                  <div style={{ background:"rgba(200,149,106,0.07)", border:"1px solid rgba(200,149,106,0.18)", borderRadius:"14px", padding:"16px 18px", marginBottom:"20px", display:"flex", gap:"12px" }}>
+                    <span style={{ fontSize:"18px", flexShrink:0 }}>🧠</span>
+                    <div>
+                      <div style={{ fontSize:"9px", letterSpacing:"2px", color:"#c8956a", textTransform:"uppercase", marginBottom:"5px" }}>Lecture de l'agent — {a?.label}s</div>
+                      <div style={{ fontSize:"12px", color:"rgba(245,237,224,0.75)", lineHeight:"1.7", fontStyle:"italic" }}>{analysis}</div>
+                    </div>
+                  </div>
+                )}
+                <div style={{ fontSize:"10px", letterSpacing:"2px", color:"rgba(245,237,224,0.3)", textTransform:"uppercase", marginBottom:"14px" }}>
+                  4 propositions — valide, ajuste ou passe
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:"12px", marginBottom:"20px" }}>
+                  {proposals.map(p => (
+                    <ProposalCard key={p.id} proposal={p}
+                      onValidate={() => generateContent(p)}
+                      onPass={() => setProposals(prev => prev.map(x => x.id===p.id ? {...x,passed:true} : x))}
+                      onAdjust={() => { setAdjustingId(adjustingId===p.id ? null : p.id); setAdjustInput(""); }}
+                      adjusting={adjustingId===p.id}
+                      onAdjustSubmit={() => submitAdjust(p.id)}
+                      adjustInput={adjustInput} setAdjustInput={setAdjustInput} adjustLoading={adjustLoading}
+                    />
+                  ))}
+                </div>
+                <div style={{ textAlign:"center" }}>
+                  <button onClick={analyze} style={{ background:"transparent", border:"1px solid rgba(255,255,255,0.1)", borderRadius:"20px", padding:"10px 24px", color:"rgba(245,237,224,0.32)", fontSize:"12px", cursor:"pointer", fontStyle:"italic" }}>
+                    ↺ 4 nouvelles propositions
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Generating */}
+            {phase==="generating" && (
+              <div style={{ textAlign:"center", padding:"48px 0", animation:"fadeIn 0.3s ease" }}>
+                <div style={{ fontSize:"36px", animation:"spin 1.5s linear infinite", display:"inline-block", marginBottom:"14px" }}>✨</div>
+                <div style={{ fontSize:"14px", color:"rgba(245,237,224,0.5)", fontStyle:"italic", animation:"pulse 2s ease infinite" }}>Création du contenu…</div>
+              </div>
+            )}
+
+            {/* Result */}
+            {phase==="result" && result && (
+              <div ref={resultRef} style={{ animation:"fadeIn 0.4s ease" }}>
+                <button onClick={() => setPhase("proposals")} style={{ background:"transparent", border:"none", color:"rgba(245,237,224,0.3)", fontSize:"12px", cursor:"pointer", fontStyle:"italic", marginBottom:"16px", padding:0, display:"flex", alignItems:"center", gap:"5px" }}>
+                  ← Retour
+                </button>
+                <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(200,149,106,0.3)", borderRadius:"18px", padding:"24px" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"18px" }}>
+                    <div>
+                      <div style={{ fontSize:"10px", letterSpacing:"3px", color:"#c8956a", textTransform:"uppercase" }}>
+                        {FORMATS[result.format]?.icon} {FORMATS[result.format]?.label} · {result.theme}
+                      </div>
+                      <div style={{ fontSize:"10px", color:"rgba(245,237,224,0.3)", marginTop:"3px", fontStyle:"italic" }}>
+                        {a?.emoji} {a?.label} · {lang.toUpperCase()}
+                      </div>
+                    </div>
+                    <button onClick={() => { navigator.clipboard.writeText(result.content); setCopied(true); setTimeout(()=>setCopied(false),2000); }} style={{
+                      background: copied ? "rgba(100,200,100,0.14)" : "rgba(200,149,106,0.14)",
+                      border:`1px solid ${copied?"rgba(100,200,100,0.35)":"rgba(200,149,106,0.35)"}`,
+                      borderRadius:"8px", padding:"8px 14px",
+                      color: copied ? "#90e090" : "#c8956a", fontSize:"12px", cursor:"pointer",
+                    }}>{copied ? "✓ Copié !" : "Copier"}</button>
+                  </div>
+                  <div style={{ whiteSpace:"pre-wrap", fontSize:"13px", lineHeight:"1.95", color:"rgba(245,237,224,0.85)" }}>
+                    {result.content}
+                  </div>
+                </div>
+                <CorrectionChat content={result.content} onUpdate={c => setResult(prev => ({...prev, content:c}))} />
+              </div>
+            )}
+
+            {/* Settings footer */}
+            <div style={{ textAlign:"center", marginTop:"48px" }}>
+              <button onClick={() => { if(confirm("Déconnecter la clé API ?")) { localStorage.removeItem("glowup_api_key"); onLogout(); } }} style={{ background:"transparent", border:"none", color:"rgba(245,237,224,0.18)", fontSize:"11px", cursor:"pointer", fontStyle:"italic" }}>
+                ⚙️ Changer de clé API
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── PIN SCREEN ─────────────────────────────────────────────────────────
+
+    function PinScreen({ onUnlock }) {
+      const hasPinStored = !!localStorage.getItem("glowup_pin");
+      const [mode]         = useState(hasPinStored ? "enter" : "create");
+      const [step,       setStep]       = useState(0);
+      const [pin,        setPin]        = useState("");
+      const [pinConfirm, setPinConfirm] = useState("");
+      const [error,      setError]      = useState("");
+      const [shake,      setShake]      = useState(false);
+
+      const current    = mode === "enter" ? pin : step === 0 ? pin : pinConfirm;
+      const setCurrent = (v) => {
+        if (mode === "enter") setPin(v);
+        else if (step === 0)  setPin(v);
+        else                  setPinConfirm(v);
+      };
+
+      const triggerShake = (msg) => {
+        setError(msg); setShake(true);
+        setTimeout(() => setShake(false), 500);
+        setTimeout(() => setError(""), 2000);
+      };
+
+      const handleDigit = (d) => {
+        if (d === "") return;
+        setError("");
+        if (d === "⌫") { setCurrent(current.slice(0, -1)); return; }
+        if (current.length >= 6) return;
+        setCurrent(current + d);
+      };
+
+      const handleNext = () => {
+        if (mode === "enter") {
+          if (pin === localStorage.getItem("glowup_pin")) onUnlock();
+          else { triggerShake("Code incorrect ❌"); setPin(""); }
+        } else if (step === 0) {
+          setStep(1);
+          setPinConfirm("");
+        } else {
+          if (pin !== pinConfirm) {
+            triggerShake("Les codes ne correspondent pas 🔄");
+            setStep(0); setPin(""); setPinConfirm("");
+          } else {
+            localStorage.setItem("glowup_pin", pin);
+            onUnlock();
+          }
+        }
+      };
+
+      const subtitle = mode === "enter" ? "Ton espace privé ✨"
+        : step === 0 ? "Choisis un code à 4–6 chiffres"
+        : "Confirme ton code";
+
+      const btnLabel = mode === "enter" ? "Entrer ✨"
+        : step === 0 ? "Continuer →"
+        : "✓ Créer mon code";
+
+      const digits = [["1","2","3"],["4","5","6"],["7","8","9"],["","0","⌫"]];
+
+      return (
+        <div style={{ minHeight:"100vh", background:"linear-gradient(160deg,#0f0c1a,#1a0d18,#120d22)", display:"flex", alignItems:"center", justifyContent:"center", padding:"24px", fontFamily:"Georgia, serif" }}>
+          <div style={{ maxWidth:"320px", width:"100%", textAlign:"center", animation:"fadeIn 0.4s ease" }}>
+            <div style={{ fontSize:"44px", marginBottom:"14px" }}>🔒</div>
+            <h2 style={{ fontSize:"1.5rem", fontWeight:"400", background:"linear-gradient(135deg,#f5e6d0,#ffc47a,#e8a0c0)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", marginBottom:"8px" }}>
+              {mode === "create" ? "Crée ton code secret" : "Glow Up & Sérénité"}
+            </h2>
+            <p style={{ color:"rgba(245,237,224,0.4)", fontSize:"12px", fontStyle:"italic", marginBottom:"24px", lineHeight:"1.6" }}>
+              {subtitle}
+            </p>
+
+            {mode === "create" && (
+              <div style={{ display:"flex", justifyContent:"center", gap:"8px", marginBottom:"20px" }}>
+                {[0,1].map(i => (
+                  <div key={i} style={{ width:"32px", height:"3px", borderRadius:"4px", transition:"all 0.3s", background: i <= step ? "linear-gradient(90deg,#c8956a,#e8608a)" : "rgba(255,255,255,0.1)" }}/>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display:"flex", justifyContent:"center", gap:"14px", marginBottom:"28px", height:"18px", animation: shake ? "shakeX 0.5s ease" : "none" }}>
+              {[...Array(Math.max(4, current.length))].map((_,i) => (
+                <div key={i} style={{
+                  width:"14px", height:"14px", borderRadius:"50%",
+                  background: i < current.length ? "linear-gradient(135deg,#c8956a,#e8608a)" : "rgba(255,255,255,0.13)",
+                  transition:"background 0.15s, transform 0.15s",
+                  transform: i < current.length ? "scale(1.15)" : "scale(1)",
+                }}/>
+              ))}
+            </div>
+
+            {error && <div style={{ fontSize:"12px", color:"#ff7a5c", marginBottom:"14px" }}>{error}</div>}
+
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"10px", marginBottom:"20px" }}>
+              {digits.flat().map((d, i) => (
+                <button key={i} onClick={() => handleDigit(d)} style={{
+                  background: d === "" ? "transparent" : "rgba(255,255,255,0.06)",
+                  border: d === "" ? "none" : "1px solid rgba(255,255,255,0.1)",
+                  borderRadius:"16px", padding:"18px 0",
+                  color: d === "⌫" ? "#c8956a" : "#f5ede0",
+                  fontSize: d === "⌫" ? "18px" : "20px",
+                  cursor: d === "" ? "default" : "pointer",
+                  WebkitTapHighlightColor:"transparent",
+                }}>{d}</button>
+              ))}
+            </div>
+
+            <button onClick={handleNext} disabled={current.length < 4} style={{
+              width:"100%",
+              background: current.length < 4 ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg,#c8956a,#e8608a,#9b68c8)",
+              border:"none", borderRadius:"50px", padding:"15px",
+              color: current.length < 4 ? "rgba(255,255,255,0.25)" : "#fff",
+              fontSize:"14px", cursor: current.length < 4 ? "not-allowed" : "pointer",
+              boxShadow: current.length >= 4 ? "0 8px 32px rgba(200,149,106,0.35)" : "none",
+              transition:"all 0.25s", fontFamily:"Georgia, serif",
+            }}>{btnLabel}</button>
+
+            {mode === "enter" && (
+              <button onClick={() => { if(window.confirm("Réinitialiser l'app ?")) { localStorage.clear(); window.location.reload(); } }}
+                style={{ background:"transparent", border:"none", color:"rgba(245,237,224,0.18)", fontSize:"11px", cursor:"pointer", marginTop:"24px", fontStyle:"italic" }}>
+                Code oublié — réinitialiser
+              </button>
+            )}
+          </div>
+          <style>{`@keyframes shakeX{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}`}</style>
+        </div>
+      );
+    }
+
+    // ── ROOT ───────────────────────────────────────────────────────────────
+
+    function SLabel({ children }) {
+      return <div style={{ fontSize:"10px", letterSpacing:"2.5px", color:"rgba(245,237,224,0.35)", textTransform:"uppercase", marginBottom:"8px" }}>{children}</div>;
+    }
+
+    function App() {
+      const [unlocked, setUnlocked] = useState(false);
+      const [hasKey, setHasKey] = useState(!!localStorage.getItem("glowup_api_key"));
+
+      if (!unlocked) return <PinScreen onUnlock={() => setUnlocked(true)} />;
+      return (
+        <>
+          {hasKey ? <Agent onLogout={() => setHasKey(false)} /> : <SetupScreen onSave={() => setHasKey(true)} />}
+          <InstallBanner />
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
