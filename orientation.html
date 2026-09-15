@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <title>Boussole 🧭</title>
+  <meta name="description" content="Ton conseiller d'orientation personnel — collège, lycée, études supérieures">
+
+  <!-- PWA iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Boussole 🧭">
+
+  <!-- PWA Android -->
+  <meta name="theme-color" content="#0a1420">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <!-- Manifest inline via data URI (Android) -->
+  <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Boussole%20-%20Conseiller%20d%27orientation%22%2C%22short_name%22%3A%22Boussole%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230a1420%22%2C%22theme_color%22%3A%22%230a1420%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%2520viewBox%3D%270%200%20100%20100%27%253E%253Crect%2520width%3D%27100%27%2520height%3D%27100%27%2520rx%3D%2722%27%2520fill%3D%27%230a1420%27%2F%253E%253Ctext%2520y%3D%27.9em%27%2520font-size%3D%2770%27%2520x%3D%2715%27%253E%25F0%259F%25A7%25AD%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22192x192%22%7D%5D%7D">
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #0a1420; -webkit-tap-highlight-color: transparent; }
+    #root { min-height: 100%; }
+    input, button, textarea, select { -webkit-appearance: none; font-family: 'Georgia', serif; }
+    ::-webkit-scrollbar { display: none; }
+    * { scrollbar-width: none; }
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes pulse { 0%,100%{opacity:0.6} 50%{opacity:1} }
+    @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useEffect, useCallback, useMemo } = React;
+
+    // ── PALETTE ────────────────────────────────────────────────────────────
+    const C = {
+      bg: "linear-gradient(160deg,#0a1420,#0d1f2e,#0a1a28)",
+      card: "rgba(255,255,255,0.045)",
+      cardBorder: "rgba(255,255,255,0.1)",
+      text: "#eaf2f0",
+      textDim: "rgba(234,242,240,0.55)",
+      textFaint: "rgba(234,242,240,0.32)",
+      accent: "#5eead4",
+      accent2: "#60a5fa",
+      accent3: "#ffb86b",
+      grad: "linear-gradient(135deg,#ffb86b,#5eead4,#60a5fa)",
+    };
+
+    // ── CONSTANTS ──────────────────────────────────────────────────────────
+
+    const NIVEAUX = [
+      { id:"college_6e5e", label:"Collège",   sub:"6e / 5e",     emoji:"🎒" },
+      { id:"college_4e3e", label:"Collège",   sub:"4e / 3e",     emoji:"📘" },
+      { id:"lycee_2de",    label:"Lycée",     sub:"Seconde",     emoji:"📗" },
+      { id:"lycee_1re",    label:"Lycée",     sub:"Première",    emoji:"📙" },
+      { id:"lycee_term",   label:"Lycée",     sub:"Terminale",   emoji:"🎓" },
+      { id:"etudiant",     label:"Étudiant",  sub:"Post-bac",    emoji:"🏛️" },
+      { id:"reorientation",label:"Réorientation", sub:"Reprise d'études", emoji:"🔄" },
+    ];
+
+    const SUBJECTS = ["Mathématiques","Français","Histoire-Géo","SES","SVT","Physique-Chimie","Langues vivantes","Arts / Musique","Sport (EPS)","Technologie / SI","Numérique / Informatique","Économie-Gestion","Philosophie"];
+
+    const MOBILITE = ["Je préfère rester près de chez moi","Je suis prêt(e) à bouger en France","Je suis même partant(e) pour l'étranger"];
+    const BUDGET = ["Études publiques / peu coûteuses de préférence","Le budget n'est pas un frein majeur","Je ne sais pas encore"];
+    const RYTHME = ["Cours classiques (lycée, fac)","En alternance / apprentissage","Le plus concret et pratique possible","Un mélange, peu importe"];
+    const CONFIANCE = ["Je suis à l'aise scolairement","Je suis dans la moyenne","Je suis en difficulté scolaire","Ça dépend beaucoup des matières"];
+
+    const RIASEC_ITEMS = [
+      { letter:"R", text:"Bricoler, réparer ou construire quelque chose de mes mains" },
+      { letter:"R", text:"Travailler en extérieur ou avec des outils / machines" },
+      { letter:"R", text:"Comprendre comment fonctionne un objet technique" },
+      { letter:"I", text:"Résoudre des problèmes complexes ou des énigmes" },
+      { letter:"I", text:"Faire des expériences, analyser des données" },
+      { letter:"I", text:"Comprendre en profondeur pourquoi les choses fonctionnent" },
+      { letter:"A", text:"Créer, dessiner, écrire ou imaginer quelque chose de nouveau" },
+      { letter:"A", text:"M'exprimer par l'art, la musique ou l'écriture" },
+      { letter:"A", text:"Travailler sans cadre trop strict, avec de la liberté" },
+      { letter:"S", text:"Aider, écouter ou soutenir les autres" },
+      { letter:"S", text:"Enseigner, expliquer ou transmettre à quelqu'un" },
+      { letter:"S", text:"Travailler en équipe autour d'un projet humain" },
+      { letter:"E", text:"Convaincre, négocier ou vendre une idée" },
+      { letter:"E", text:"Prendre des initiatives et diriger un projet" },
+      { letter:"E", text:"Monter mon propre projet ou une petite entreprise" },
+      { letter:"C", text:"Organiser, classer ou planifier avec méthode" },
+      { letter:"C", text:"Suivre des procédures claires et précises" },
+      { letter:"C", text:"Gérer des chiffres, un budget ou des données avec rigueur" },
+    ];
+    const RIASEC_LABELS = { R:"Réaliste (concret / technique)", I:"Investigateur (analyser / comprendre)", A:"Artistique (créer / exprimer)", S:"Social (aider / transmettre)", E:"Entreprenant (convaincre / diriger)", C:"Conventionnel (organiser / structurer)" };
+    const SCALE = ["Pas du tout","Un peu","Assez","Beaucoup"];
+
+    // ── API ────────────────────────────────────────────────────────────────
+
+    async function callAPI(system, messages, tokens = 1400) {
+      const key = localStorage.getItem("orientation_api_key");
+      if (!key) throw new Error("NO_KEY");
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": key,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({ model:"claude-sonnet-5", max_tokens:tokens, system, messages }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      return data.content?.map(b => b.text || "").join("\n") || "";
+    }
+
+    function extractBlocks(text, tag) {
+      const re = new RegExp("```" + tag + "\\s*([\\s\\S]*?)```", "g");
+      const blocks = [];
+      const clean = text.replace(re, (m, body) => {
+        try { blocks.push(JSON.parse(body.trim())); } catch(e) {}
+        return "";
+      }).trim();
+      return { clean, blocks };
+    }
+
+    // ── SYSTEM PROMPT ──────────────────────────────────────────────────────
+
+    function buildAdvisorSystem(profile) {
+      return `Tu es "Boussole", un conseiller d'orientation scolaire et professionnelle expert du système éducatif français, chaleureux, honnête et extrêmement concret. Tu accompagnes un(e) élève ou étudiant(e) pour l'aider à trouver sa voie. Tu n'es PAS un chatbot générique : tu es un vrai spécialiste qui connaît en détail :
+
+- Collège : choix de fin de 3e (voie générale/techno vs voie pro, CAP, stage d'observation).
+- Lycée général : les spécialités de Première/Terminale (Mathématiques, Physique-Chimie, SVT, SES, HGGSP, HLP, LLCE, NSI, SI, Arts, SVT...), leurs combinaisons typiques et leur lien avec les études visées.
+- Lycée technologique : STMG, STI2D, ST2S, STL, STD2A, STHR, S2TMD — leurs débouchés concrets.
+- Voie professionnelle : CAP, Bac Pro, poursuite possible en BTS.
+- Post-bac (Parcoursup) : Licence (fac), BUT (ex-DUT), BTS, CPGE (prépas), écoles d'ingénieurs post-bac, écoles de commerce post-bac, IEP/Sciences Po, écoles spécialisées (art, paramédical, social...), apprentissage/alternance, service civique, année de césure, double-diplômes, réorientation et passerelles.
+- Le calendrier Parcoursup réel : ouverture des vœux mi/fin janvier, formulation des vœux jusqu'à début mars, finalisation des dossiers début avril, réponses des formations à partir de fin mai/juin, phase complémentaire en été.
+- Les ressources fiables à recommander : ONISEP, Parcoursup, le/la psy-EN (ex-COP) et le CIO de l'établissement, les journées portes ouvertes (JPO), les stages d'observation, l'immersion dans les études sup (dispositif "Immersion Parcoursup").
+
+MÉTHODE DE TRAVAIL (à respecter strictement) :
+1. Tu t'appuies sur le profil ci-dessous (fourni une fois en contexte) : niveau scolaire, matières aimées/difficiles, centres d'intérêt hors école, contraintes (mobilité, budget, rythme souhaité, rapport aux notes), éventuelle idée de départ, et résultats d'un test d'intérêts RIASEC (code des 3 lettres dominantes).
+2. Tu ne donnes JAMAIS une seule "bonne réponse" toute faite. Tu explores toujours au moins 2 à 4 pistes différentes et compatibles, en étant honnête sur leurs exigences (niveau, sélectivité, matières clés) et leurs limites.
+3. Si une information te manque pour être vraiment pertinent (ex: niveau réel dans une matière clé, appétence pour telle activité), pose 1 à 2 questions ciblées avant de te lancer dans de grandes recommandations — mais ne bloque jamais la conversation avec trop de questions d'affilée.
+4. Tu relies systématiquement tes suggestions à des éléments précis du profil (pas de conseils génériques). Tu expliques le "pourquoi" en citant le profil.
+5. Tu es honnête sur la sélectivité (CPGE, écoles, filières en tension) sans décourager, et tu proposes toujours un plan B réaliste.
+6. Tu combats les stéréotypes de genre ou sociaux dans tes suggestions.
+7. Si l'élève exprime une grande anxiété, une pression familiale forte ou un mal-être, tu restes bienveillant, tu le/la rassures sur le fait qu'aucun choix n'est définitif (les passerelles et réorientations existent), et tu l'encourages à en parler aussi à un adulte de confiance ou au psy-EN — tu restes dans ton rôle de conseiller d'orientation, pas de thérapeute.
+8. Tu rappelles, sans être lourd, que les modalités d'admission changent chaque année et qu'il faut vérifier les infos à jour sur Parcoursup/ONISEP.
+
+FORMAT DE RÉPONSE (important) :
+- Réponds normalement en texte, en français, avec un ton direct, chaleureux, jamais moralisateur.  Phrases courtes, pas de blabla.
+- Quand tu proposes une piste concrète (filière, formation ou métier), ajoute en plus de ton texte un bloc structuré séparé, au format EXACT suivant (un bloc par piste, tu peux en mettre plusieurs dans un même message) :
+\`\`\`fiche
+{"titre":"Nom court de la filière ou du métier","type":"filiere ou metier","niveau_requis":"ex: Bac, Bac+2, Bac+3, Bac+5","duree":"ex: 2 ans, 3 ans","description":"2-3 phrases concrètes","points_forts":["...","..."],"points_de_vigilance":["...","..."],"prochaines_etapes":["...","..."]}
+\`\`\`
+  Le texte hors bloc doit rester lisible seul (le bloc \`fiche\` est extrait et affiché à part, ne le répète pas dans ton texte).
+- Tu peux terminer ta réponse par un bloc optionnel de 2 à 4 suggestions de réponses rapides pour aider l'élève à continuer la conversation, au format EXACT :
+\`\`\`suggestions
+["Réponse courte 1","Réponse courte 2","Réponse courte 3"]
+\`\`\`
+  N'en mets pas si ce n'est pas utile (ex: si tu poses déjà une question ouverte précise).
+
+PROFIL DE L'ÉLÈVE :
+${profile}`;
+    }
+
+    function computeRiasec(answers) {
+      const scores = { R:0, I:0, A:0, S:0, E:0, C:0 };
+      RIASEC_ITEMS.forEach((item, i) => { scores[item.letter] += (answers[i] ?? 0); });
+      const sorted = Object.entries(scores).sort((a,b) => b[1]-a[1]);
+      return { scores, code: sorted.slice(0,3).map(x=>x[0]).join("") , sorted };
+    }
+
+    function buildProfileSummary(w, riasec) {
+      const niv = NIVEAUX.find(n => n.id === w.niveau);
+      const lines = [];
+      lines.push(`Niveau : ${niv ? `${niv.label} — ${niv.sub}` : "non précisé"}`);
+      lines.push(`Matières qui plaisent : ${w.likes.length ? w.likes.join(", ") : "aucune indiquée"}`);
+      lines.push(`Matières plus difficiles / moins aimées : ${w.dislikes.length ? w.dislikes.join(", ") : "aucune indiquée"}`);
+      lines.push(`Centres d'intérêt hors école : ${w.interests.trim() || "non précisé"}`);
+      lines.push(`Mobilité géographique : ${w.mobilite || "non précisé"}`);
+      lines.push(`Rapport au budget des études : ${w.budget || "non précisé"}`);
+      lines.push(`Rythme d'apprentissage souhaité : ${w.rythme || "non précisé"}`);
+      lines.push(`Rapport aux notes / confiance scolaire : ${w.confiance || "non précisé"}`);
+      lines.push(`Idée de départ (si vague, tant mieux, c'est un point de départ) : ${w.idee.trim() || "aucune idée pour l'instant"}`);
+      if (riasec) {
+        lines.push(`Code RIASEC dominant : ${riasec.code} (${riasec.sorted.slice(0,3).map(([l,s])=>`${RIASEC_LABELS[l]}: ${s}/12`).join(" · ")})`);
+      }
+      return lines.map(l => `- ${l}`).join("\n");
+    }
+
+    // ── SETUP SCREEN ───────────────────────────────────────────────────────
+
+    function SetupScreen({ onSave }) {
+      const [key, setKey] = useState("");
+      const [error, setError] = useState("");
+      const [testing, setTesting] = useState(false);
+
+      const save = async () => {
+        if (!key.trim().startsWith("sk-ant-")) {
+          setError("La clé doit commencer par « sk-ant-… »");
+          return;
+        }
+        setTesting(true); setError("");
+        try {
+          localStorage.setItem("orientation_api_key", key.trim());
+          await callAPI("Tu es un assistant.", [{ role:"user", content:"Dis juste : OK" }], 10);
+          onSave();
+        } catch(e) {
+          localStorage.removeItem("orientation_api_key");
+          setError("Clé invalide ou erreur de connexion. Vérifie et réessaie.");
+        }
+        setTesting(false);
+      };
+
+      return (
+        <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", padding:"24px", fontFamily:"Georgia, serif" }}>
+          <div style={{ maxWidth:"380px", width:"100%", animation:"fadeIn 0.5s ease" }}>
+            <div style={{ textAlign:"center", marginBottom:"40px" }}>
+              <div style={{ fontSize:"52px", marginBottom:"16px", animation:"bob 3s ease-in-out infinite", display:"inline-block" }}>🧭</div>
+              <h1 style={{ fontSize:"1.8rem", fontWeight:"400", background:C.grad, WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", marginBottom:"10px" }}>
+                Boussole
+              </h1>
+              <p style={{ color:C.textFaint, fontSize:"13px", fontStyle:"italic", lineHeight:"1.7" }}>
+                Ton conseiller d'orientation personnel
+              </p>
+            </div>
+
+            <div style={{ background:C.card, border:`1px solid ${C.cardBorder}`, borderRadius:"18px", padding:"28px" }}>
+              <div style={{ fontSize:"13px", color:C.textDim, lineHeight:"1.8", marginBottom:"24px" }}>
+                Pour fonctionner, Boussole a besoin d'une <strong style={{ color:C.accent3 }}>clé API Anthropic</strong> personnelle.
+                Elle reste stockée uniquement sur ton appareil, jamais envoyée ailleurs.
+              </div>
+
+              <a href="https://console.anthropic.com/account/keys" target="_blank" rel="noopener" style={{
+                display:"block", textAlign:"center", background:"rgba(94,234,212,0.1)",
+                border:"1px solid rgba(94,234,212,0.35)", borderRadius:"10px",
+                padding:"11px", color:C.accent, fontSize:"12px", textDecoration:"none",
+                marginBottom:"20px",
+              }}>
+                🔑 Obtenir ma clé sur console.anthropic.com →
+              </a>
+
+              <div style={{ marginBottom:"16px" }}>
+                <div style={{ fontSize:"10px", letterSpacing:"2px", color:C.textFaint, textTransform:"uppercase", marginBottom:"8px" }}>Ta clé API</div>
+                <input
+                  type="password"
+                  value={key}
+                  onChange={e => { setKey(e.target.value); setError(""); }}
+                  onKeyDown={e => e.key==="Enter" && save()}
+                  placeholder="sk-ant-api03-…"
+                  style={{
+                    width:"100%", background:"rgba(255,255,255,0.06)", border:`1px solid ${error?"rgba(255,100,80,0.5)":"rgba(255,255,255,0.12)"}`,
+                    borderRadius:"10px", padding:"13px 16px", color:C.text, fontSize:"14px",
+                    outline:"none", fontFamily:"monospace", letterSpacing:"1px",
+                  }}
+                />
+                {error && <div style={{ fontSize:"11px", color:"#ff7a5c", marginTop:"6px" }}>{error}</div>}
+              </div>
+
+              <button onClick={save} disabled={!key.trim() || testing} style={{
+                width:"100%", background: !key.trim() ? "rgba(255,255,255,0.06)" : C.grad,
+                border:"none", borderRadius:"12px", padding:"15px",
+                color: !key.trim() ? "rgba(255,255,255,0.2)" : "#0a1420",
+                fontSize:"15px", fontWeight:"600", cursor: !key.trim() ? "not-allowed" : "pointer", fontFamily:"Georgia, serif",
+                boxShadow: key.trim() ? "0 8px 32px rgba(94,234,212,0.25)" : "none",
+              }}>
+                {testing ? "Vérification…" : "Commencer 🧭"}
+              </button>
+
+              <div style={{ fontSize:"11px", color:C.textFaint, textAlign:"center", marginTop:"14px", lineHeight:"1.7" }}>
+                La clé n'est jamais envoyée ailleurs qu'à Anthropic.<br/>
+                Elle est stockée uniquement sur cet appareil.
+              </div>
+            </div>
+            <div style={{ textAlign:"center", marginTop:"24px" }}>
+              <a href="index.html" style={{ color:C.textFaint, fontSize:"11px", textDecoration:"none", fontStyle:"italic" }}>✨ Voir aussi Glow Up &amp; Sérénité →</a>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── INSTALL BANNER ─────────────────────────────────────────────────────
+
+    function InstallBanner() {
+      const [visible, setVisible] = useState(false);
+      useEffect(() => {
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+        const isAndroid = /android/i.test(navigator.userAgent);
+        const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+        const dismissed = localStorage.getItem("orientation_install_dismissed");
+        if ((isIOS || isAndroid) && !isStandalone && !dismissed) setVisible(true);
+      }, []);
+
+      if (!visible) return null;
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+      return (
+        <div style={{
+          position:"fixed", bottom: "env(safe-area-inset-bottom, 16px)", left:"12px", right:"12px",
+          background:"rgba(10,20,32,0.97)", border:"1px solid rgba(94,234,212,0.35)",
+          borderRadius:"16px", padding:"16px", zIndex:1000,
+          backdropFilter:"blur(20px)", display:"flex", gap:"12px", alignItems:"flex-start",
+          animation:"fadeIn 0.4s ease",
+        }}>
+          <span style={{ fontSize:"22px", flexShrink:0 }}>📲</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:"13px", color:C.accent, fontFamily:"Georgia, serif", marginBottom:"4px" }}>
+              Installer Boussole sur l'écran d'accueil
+            </div>
+            <div style={{ fontSize:"11px", color:C.textDim, lineHeight:"1.6" }}>
+              {isIOS
+                ? "Appuie sur le bouton Partager (⎙) en bas de Safari, puis « Sur l'écran d'accueil »"
+                : "Appuie sur les 3 points (⋮) en haut de Chrome, puis « Ajouter à l'écran d'accueil »"}
+            </div>
+          </div>
+          <button onClick={() => { localStorage.setItem("orientation_install_dismissed","1"); setVisible(false); }} style={{
+            background:"transparent", border:"none", color:C.textFaint,
+            fontSize:"18px", cursor:"pointer", flexShrink:0, lineHeight:1,
+          }}>×</button>
+        </div>
+      );
+    }
+
+    // ── UI HELPERS ─────────────────────────────────────────────────────────
+
+    function SLabel({ children }) {
+      return <div style={{ fontSize:"10px", letterSpacing:"2.5px", color:C.textFaint, textTransform:"uppercase", marginBottom:"8px" }}>{children}</div>;
+    }
+
+    function Tag({ active, onClick, children }) {
+      return (
+        <button onClick={onClick} style={{
+          background: active ? "rgba(94,234,212,0.16)" : "rgba(255,255,255,0.04)",
+          border:`1px solid ${active ? "rgba(94,234,212,0.5)" : "rgba(255,255,255,0.1)"}`,
+          borderRadius:"20px", padding:"8px 14px", cursor:"pointer",
+          color: active ? C.accent : C.textDim, fontSize:"12.5px", transition:"all 0.15s",
+        }}>{children}</button>
+      );
+    }
+
+    function ChoiceList({ options, value, onChange }) {
+      return (
+        <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+          {options.map(opt => (
+            <button key={opt} onClick={() => onChange(opt)} style={{
+              textAlign:"left", background: value===opt ? "rgba(94,234,212,0.12)" : "rgba(255,255,255,0.04)",
+              border:`1px solid ${value===opt ? "rgba(94,234,212,0.45)" : "rgba(255,255,255,0.09)"}`,
+              borderRadius:"12px", padding:"12px 14px", cursor:"pointer",
+              color: value===opt ? C.accent : C.textDim, fontSize:"13px", lineHeight:"1.5",
+            }}>{value===opt ? "● " : "○ "}{opt}</button>
+          ))}
+        </div>
+      );
+    }
+
+    // ── ONBOARDING WIZARD ──────────────────────────────────────────────────
+
+    const STEP_COUNT = 6;
+
+    function OnboardingWizard({ onComplete }) {
+      const [step, setStep] = useState(0);
+      const [w, setW] = useState({ niveau:null, likes:[], dislikes:[], interests:"", mobilite:"", budget:"", rythme:"", confiance:"", idee:"" });
+      const [answers, setAnswers] = useState({});
+
+      const toggle = (field, value) => setW(prev => {
+        const arr = prev[field].includes(value) ? prev[field].filter(x=>x!==value) : [...prev[field], value];
+        return { ...prev, [field]: arr };
+      });
+
+      const canNext = [
+        !!w.niveau,
+        true,
+        true,
+        !!(w.mobilite && w.budget && w.rythme && w.confiance),
+        Object.keys(answers).length === RIASEC_ITEMS.length,
+        true,
+      ][step];
+
+      const finish = () => {
+        const riasec = computeRiasec(answers);
+        onComplete(w, riasec);
+      };
+
+      const barPct = Math.round(((step+1)/STEP_COUNT)*100);
+
+      return (
+        <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"Georgia, serif", color:C.text }}>
+          <div style={{ maxWidth:"560px", margin:"0 auto", padding:"36px 18px calc(env(safe-area-inset-bottom,0px) + 40px)" }}>
+            <div style={{ textAlign:"center", marginBottom:"28px" }}>
+              <div style={{ fontSize:"34px", marginBottom:"6px" }}>🧭</div>
+              <div style={{ fontSize:"10px", letterSpacing:"3px", color:C.accent3, textTransform:"uppercase" }}>Étape {step+1} / {STEP_COUNT}</div>
+              <div style={{ height:"4px", background:"rgba(255,255,255,0.08)", borderRadius:"4px", marginTop:"10px", overflow:"hidden" }}>
+                <div style={{ height:"100%", width:`${barPct}%`, background:C.grad, transition:"width 0.3s" }}/>
+              </div>
+            </div>
+
+            <div style={{ background:C.card, border:`1px solid ${C.cardBorder}`, borderRadius:"18px", padding:"24px", animation:"fadeIn 0.35s ease" }}>
+
+              {step === 0 && (
+                <>
+                  <h2 style={{ fontSize:"1.2rem", fontWeight:"400", marginBottom:"6px" }}>Où en es-tu ?</h2>
+                  <p style={{ fontSize:"12px", color:C.textFaint, marginBottom:"18px" }}>Ton niveau actuel, pour adapter les conseils.</p>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
+                    {NIVEAUX.map(n => (
+                      <button key={n.id} onClick={() => setW({...w, niveau:n.id})} style={{
+                        background: w.niveau===n.id ? "rgba(94,234,212,0.14)" : "rgba(255,255,255,0.04)",
+                        border:`1px solid ${w.niveau===n.id ? "rgba(94,234,212,0.5)" : "rgba(255,255,255,0.1)"}`,
+                        borderRadius:"14px", padding:"14px 10px", cursor:"pointer",
+                        color: w.niveau===n.id ? C.accent : C.textDim, display:"flex", flexDirection:"column", gap:"4px", alignItems:"flex-start",
+                      }}>
+                        <span style={{ fontSize:"20px" }}>{n.emoji}</span>
+                        <span style={{ fontSize:"13px", fontWeight:"600" }}>{n.label}</span>
+                        <span style={{ fontSize:"11px", opacity:0.65 }}>{n.sub}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {step === 1 && (
+                <>
+                  <h2 style={{ fontSize:"1.2rem", fontWeight:"400", marginBottom:"6px" }}>Les matières</h2>
+                  <p style={{ fontSize:"12px", color:C.textFaint, marginBottom:"14px" }}>Sélectionne celles qui te plaisent, puis celles qui te posent le plus de difficultés (facultatif).</p>
+                  <SLabel>Ça me plaît</SLabel>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:"8px", marginBottom:"18px" }}>
+                    {SUBJECTS.map(s => <Tag key={s} active={w.likes.includes(s)} onClick={() => toggle("likes", s)}>{s}</Tag>)}
+                  </div>
+                  <SLabel>Plus difficile / moins aimé</SLabel>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:"8px" }}>
+                    {SUBJECTS.map(s => <Tag key={s} active={w.dislikes.includes(s)} onClick={() => toggle("dislikes", s)}>{s}</Tag>)}
+                  </div>
+                </>
+              )}
+
+              {step === 2 && (
+                <>
+                  <h2 style={{ fontSize:"1.2rem", fontWeight:"400", marginBottom:"6px" }}>Hors de l'école</h2>
+                  <p style={{ fontSize:"12px", color:C.textFaint, marginBottom:"14px" }}>Qu'est-ce qui te fait vibrer ? Passions, activités, sports, jeux, lectures, réseaux, projets perso… Tout compte.</p>
+                  <textarea value={w.interests} onChange={e => setW({...w, interests:e.target.value})}
+                    placeholder="ex : je passe du temps à monter des vidéos, j'adore le foot, je bidouille des trucs électroniques…"
+                    rows={5}
+                    style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:"12px", padding:"12px 14px", color:C.text, fontSize:"13px", outline:"none", resize:"vertical", lineHeight:"1.6" }}
+                  />
+                </>
+              )}
+
+              {step === 3 && (
+                <>
+                  <h2 style={{ fontSize:"1.2rem", fontWeight:"400", marginBottom:"14px" }}>Tes préférences</h2>
+                  <SLabel>Mobilité géographique</SLabel>
+                  <div style={{ marginBottom:"16px" }}><ChoiceList options={MOBILITE} value={w.mobilite} onChange={v => setW({...w, mobilite:v})} /></div>
+                  <SLabel>Budget des études</SLabel>
+                  <div style={{ marginBottom:"16px" }}><ChoiceList options={BUDGET} value={w.budget} onChange={v => setW({...w, budget:v})} /></div>
+                  <SLabel>Rythme souhaité</SLabel>
+                  <div style={{ marginBottom:"16px" }}><ChoiceList options={RYTHME} value={w.rythme} onChange={v => setW({...w, rythme:v})} /></div>
+                  <SLabel>Rapport aux notes</SLabel>
+                  <ChoiceList options={CONFIANCE} value={w.confiance} onChange={v => setW({...w, confiance:v})} />
+                </>
+              )}
+
+              {step === 4 && (
+                <>
+                  <h2 style={{ fontSize:"1.2rem", fontWeight:"400", marginBottom:"6px" }}>Petit test d'intérêts</h2>
+                  <p style={{ fontSize:"12px", color:C.textFaint, marginBottom:"16px" }}>Pour chaque proposition, indique si ça te plairait. ({Object.keys(answers).length}/{RIASEC_ITEMS.length})</p>
+                  <div style={{ display:"flex", flexDirection:"column", gap:"14px", maxHeight:"420px", overflowY:"auto", paddingRight:"2px" }}>
+                    {RIASEC_ITEMS.map((item, i) => (
+                      <div key={i}>
+                        <div style={{ fontSize:"13px", color:C.textDim, marginBottom:"8px", lineHeight:"1.5" }}>{item.text}</div>
+                        <div style={{ display:"flex", gap:"6px" }}>
+                          {SCALE.map((lbl, si) => (
+                            <button key={si} onClick={() => setAnswers({...answers, [i]: si+1})} style={{
+                              flex:1, background: answers[i]===si+1 ? "rgba(94,234,212,0.18)" : "rgba(255,255,255,0.04)",
+                              border:`1px solid ${answers[i]===si+1 ? "rgba(94,234,212,0.5)" : "rgba(255,255,255,0.08)"}`,
+                              borderRadius:"8px", padding:"7px 4px", color: answers[i]===si+1 ? C.accent : C.textFaint,
+                              fontSize:"10px", cursor:"pointer", lineHeight:"1.3",
+                            }}>{lbl}</button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {step === 5 && (
+                <>
+                  <h2 style={{ fontSize:"1.2rem", fontWeight:"400", marginBottom:"6px" }}>Une idée en tête ?</h2>
+                  <p style={{ fontSize:"12px", color:C.textFaint, marginBottom:"14px" }}>
+                    Même vague ou pas sûre du tout, dis-le. Si tu n'as aucune idée, écris-le aussi — c'est un excellent point de départ.
+                  </p>
+                  <textarea value={w.idee} onChange={e => setW({...w, idee:e.target.value})}
+                    placeholder="ex : peut-être quelque chose avec les animaux ? / aucune idée pour l'instant / je pensais à médecine mais je doute…"
+                    rows={5}
+                    style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:"12px", padding:"12px 14px", color:C.text, fontSize:"13px", outline:"none", resize:"vertical", lineHeight:"1.6" }}
+                  />
+                </>
+              )}
+
+            </div>
+
+            <div style={{ display:"flex", gap:"10px", marginTop:"20px" }}>
+              {step > 0 && (
+                <button onClick={() => setStep(step-1)} style={{ background:"transparent", border:"1px solid rgba(255,255,255,0.12)", borderRadius:"50px", padding:"14px 22px", color:C.textDim, fontSize:"13px", cursor:"pointer" }}>
+                  ← Retour
+                </button>
+              )}
+              <button
+                onClick={() => step === STEP_COUNT-1 ? finish() : setStep(step+1)}
+                disabled={!canNext}
+                style={{
+                  flex:1, background: !canNext ? "rgba(255,255,255,0.06)" : C.grad,
+                  border:"none", borderRadius:"50px", padding:"14px",
+                  color: !canNext ? "rgba(255,255,255,0.2)" : "#0a1420", fontWeight:"600",
+                  fontSize:"14px", cursor: !canNext ? "not-allowed" : "pointer",
+                }}
+              >
+                {step === STEP_COUNT-1 ? "Découvrir mes pistes 🧭" : "Suivant →"}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── PISTE CARD ─────────────────────────────────────────────────────────
+
+    function PisteCard({ fiche, onRemove }) {
+      return (
+        <div style={{ background:C.card, border:`1px solid ${C.cardBorder}`, borderLeft:`3px solid ${C.accent}`, borderRadius:"14px", padding:"16px 18px", marginBottom:"10px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"8px" }}>
+            <div>
+              <div style={{ fontSize:"14px", fontWeight:"600", color:C.text }}>{fiche.titre}</div>
+              <div style={{ display:"flex", gap:"6px", marginTop:"4px", flexWrap:"wrap" }}>
+                {fiche.niveau_requis && <span style={{ fontSize:"10px", background:"rgba(255,255,255,0.08)", borderRadius:"8px", padding:"2px 7px", color:C.textDim }}>{fiche.niveau_requis}</span>}
+                {fiche.duree && <span style={{ fontSize:"10px", background:"rgba(255,255,255,0.08)", borderRadius:"8px", padding:"2px 7px", color:C.textDim }}>{fiche.duree}</span>}
+                {fiche.type && <span style={{ fontSize:"10px", color:C.accent3 }}>{fiche.type === "metier" ? "💼 Métier" : "🎓 Filière"}</span>}
+              </div>
+            </div>
+            {onRemove && <button onClick={onRemove} style={{ background:"transparent", border:"none", color:C.textFaint, fontSize:"18px", cursor:"pointer", lineHeight:1 }}>×</button>}
+          </div>
+          {fiche.description && <div style={{ fontSize:"12.5px", color:C.textDim, lineHeight:"1.7", marginBottom:"10px" }}>{fiche.description}</div>}
+          {fiche.points_forts?.length > 0 && (
+            <div style={{ marginBottom:"8px" }}>
+              <div style={{ fontSize:"10px", letterSpacing:"1.5px", color:C.accent, textTransform:"uppercase", marginBottom:"4px" }}>✓ Points forts</div>
+              {fiche.points_forts.map((p,i) => <div key={i} style={{ fontSize:"12px", color:C.textDim, lineHeight:"1.6" }}>· {p}</div>)}
+            </div>
+          )}
+          {fiche.points_de_vigilance?.length > 0 && (
+            <div style={{ marginBottom:"8px" }}>
+              <div style={{ fontSize:"10px", letterSpacing:"1.5px", color:C.accent3, textTransform:"uppercase", marginBottom:"4px" }}>⚠ À surveiller</div>
+              {fiche.points_de_vigilance.map((p,i) => <div key={i} style={{ fontSize:"12px", color:C.textDim, lineHeight:"1.6" }}>· {p}</div>)}
+            </div>
+          )}
+          {fiche.prochaines_etapes?.length > 0 && (
+            <div>
+              <div style={{ fontSize:"10px", letterSpacing:"1.5px", color:C.accent2, textTransform:"uppercase", marginBottom:"4px" }}>→ Prochaines étapes</div>
+              {fiche.prochaines_etapes.map((p,i) => <div key={i} style={{ fontSize:"12px", color:C.textDim, lineHeight:"1.6" }}>· {p}</div>)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── CHAT MESSAGE ───────────────────────────────────────────────────────
+
+    function ChatMessage({ msg, onSuggestionClick }) {
+      if (msg.hidden) return null;
+      const isUser = msg.role === "user";
+      const { clean, blocks:fiches } = msg.role === "assistant" ? extractBlocks(msg.content, "fiche") : { clean: msg.content, blocks: [] };
+      const { clean:cleanText, blocks:suggBlocks } = msg.role === "assistant" ? extractBlocks(clean, "suggestions") : { clean, blocks: [] };
+      const suggestions = suggBlocks[0] || [];
+
+      return (
+        <div style={{ display:"flex", flexDirection:"column", alignItems: isUser ? "flex-end" : "flex-start", marginBottom:"16px" }}>
+          {cleanText && (
+            <div style={{
+              maxWidth:"88%", background: isUser ? "rgba(96,165,250,0.14)" : C.card,
+              border:`1px solid ${isUser ? "rgba(96,165,250,0.3)" : C.cardBorder}`,
+              borderRadius:"16px", padding:"13px 16px",
+              fontSize:"13.5px", color:C.text, lineHeight:"1.75", whiteSpace:"pre-wrap",
+            }}>{cleanText}</div>
+          )}
+          {fiches.map((f,i) => <div key={i} style={{ maxWidth:"92%", width:"100%", marginTop:"8px" }}><PisteCard fiche={f} /></div>)}
+          {suggestions.length > 0 && (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:"8px", marginTop:"10px", maxWidth:"92%" }}>
+              {suggestions.map((s,i) => (
+                <button key={i} onClick={() => onSuggestionClick(s)} style={{
+                  background:"rgba(94,234,212,0.1)", border:"1px solid rgba(94,234,212,0.35)",
+                  borderRadius:"20px", padding:"8px 14px", color:C.accent, fontSize:"12px", cursor:"pointer",
+                }}>{s}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── EXPORT MODAL ───────────────────────────────────────────────────────
+
+    function buildSynthesis(w, riasec, pistes) {
+      const niv = NIVEAUX.find(n => n.id === w.niveau);
+      const date = new Date().toLocaleDateString("fr-FR");
+      let out = `🧭 MA SYNTHÈSE D'ORIENTATION — ${date}\n\n`;
+      out += `Niveau : ${niv ? `${niv.label} — ${niv.sub}` : "-"}\n`;
+      if (riasec) out += `Code RIASEC dominant : ${riasec.code}\n`;
+      out += `Matières préférées : ${w.likes.join(", ") || "-"}\n`;
+      out += `Matières plus difficiles : ${w.dislikes.join(", ") || "-"}\n`;
+      out += `Centres d'intérêt : ${w.interests.trim() || "-"}\n`;
+      out += `Mobilité : ${w.mobilite || "-"}\n`;
+      out += `Budget : ${w.budget || "-"}\n`;
+      out += `Rythme souhaité : ${w.rythme || "-"}\n`;
+      out += `Idée de départ : ${w.idee.trim() || "-"}\n\n`;
+      out += `── Pistes explorées avec Boussole ──\n\n`;
+      if (pistes.length === 0) out += "(aucune piste enregistrée pour l'instant — continue la conversation !)\n";
+      pistes.forEach((f,i) => {
+        out += `${i+1}. ${f.titre}${f.type ? ` (${f.type === "metier" ? "métier" : "filière"})` : ""}\n`;
+        if (f.niveau_requis) out += `   Niveau requis : ${f.niveau_requis}\n`;
+        if (f.duree) out += `   Durée : ${f.duree}\n`;
+        if (f.description) out += `   ${f.description}\n`;
+        if (f.points_forts?.length) out += `   Points forts : ${f.points_forts.join(" / ")}\n`;
+        if (f.points_de_vigilance?.length) out += `   À surveiller : ${f.points_de_vigilance.join(" / ")}\n`;
+        if (f.prochaines_etapes?.length) out += `   Prochaines étapes : ${f.prochaines_etapes.join(" / ")}\n`;
+        out += "\n";
+      });
+      out += `Généré avec Boussole 🧭 le ${date}. Pense à vérifier les infos à jour sur Parcoursup / ONISEP, et à en parler avec ton/ta psy-EN ou ton CIO.`;
+      return out;
+    }
+
+    function ExportModal({ text, onClose }) {
+      const [copied, setCopied] = useState(false);
+      const download = () => {
+        const blob = new Blob([text], { type:"text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "ma-synthese-orientation.txt";
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      };
+      return (
+        <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:"#0d1f2e", border:`1px solid ${C.cardBorder}`, borderRadius:"18px", padding:"22px", maxWidth:"520px", width:"100%", maxHeight:"80vh", display:"flex", flexDirection:"column" }}>
+            <div style={{ fontSize:"14px", color:C.accent, marginBottom:"12px" }}>🧭 Ma synthèse d'orientation</div>
+            <textarea readOnly value={text} style={{ flex:1, minHeight:"260px", background:"rgba(255,255,255,0.04)", border:`1px solid ${C.cardBorder}`, borderRadius:"10px", padding:"14px", color:C.textDim, fontSize:"12px", lineHeight:"1.7", resize:"none", outline:"none", marginBottom:"14px" }}/>
+            <div style={{ display:"flex", gap:"10px" }}>
+              <button onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false),2000); }} style={{ flex:1, background:"rgba(94,234,212,0.14)", border:"1px solid rgba(94,234,212,0.4)", borderRadius:"10px", padding:"11px", color:C.accent, fontSize:"13px", cursor:"pointer" }}>{copied ? "✓ Copié !" : "Copier"}</button>
+              <button onClick={download} style={{ flex:1, background:"rgba(255,255,255,0.06)", border:`1px solid ${C.cardBorder}`, borderRadius:"10px", padding:"11px", color:C.text, fontSize:"13px", cursor:"pointer" }}>⬇ Télécharger .txt</button>
+              <button onClick={onClose} style={{ background:"transparent", border:"none", color:C.textFaint, fontSize:"13px", cursor:"pointer", padding:"11px" }}>Fermer</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── CHAT SCREEN ────────────────────────────────────────────────────────
+
+    function ChatScreen({ profile, riasec, messages, setMessages, pistes, setPistes, onReset }) {
+      const [input, setInput] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState("");
+      const [showBoard, setShowBoard] = useState(false);
+      const [showExport, setShowExport] = useState(false);
+      const endRef = useRef(null);
+      const started = useRef(false);
+
+      const system = useMemo(() => buildAdvisorSystem(profile), [profile]);
+
+      useEffect(() => { endRef.current?.scrollIntoView({ behavior:"smooth" }); }, [messages, loading]);
+
+      const mergePistes = useCallback((fiches) => {
+        if (!fiches.length) return;
+        setPistes(prev => {
+          const map = new Map(prev.map(f => [f.titre, f]));
+          fiches.forEach(f => { if (f.titre) map.set(f.titre, f); });
+          return Array.from(map.values());
+        });
+      }, [setPistes]);
+
+      const send = useCallback(async (history, textForApi) => {
+        setLoading(true); setError("");
+        try {
+          const apiMessages = history.map(m => ({ role:m.role, content:m.content }));
+          const reply = await callAPI(system, apiMessages, 1600);
+          const { blocks:fiches } = extractBlocks(reply, "fiche");
+          mergePistes(fiches);
+          setMessages(prev => [...prev, { role:"assistant", content:reply }]);
+        } catch(e) {
+          setError(e.message === "NO_KEY" ? "Clé API manquante." : (e.message || "Erreur de connexion."));
+        }
+        setLoading(false);
+      }, [system, mergePistes, setMessages]);
+
+      useEffect(() => {
+        if (started.current || messages.length > 0) { started.current = true; return; }
+        started.current = true;
+        const opening = `Voici mon profil, aide-moi à trouver ma voie :\n${buildProfileSummary(profile, riasec)}\n\nCommence par une courte lecture de mon profil (ce qui ressort), puis propose-moi 2 à 3 premières pistes à explorer ou pose-moi les questions qui te manquent.`;
+        const hiddenUserMsg = { role:"user", content:opening, hidden:true };
+        setMessages([hiddenUserMsg]);
+        send([hiddenUserMsg]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+
+      const submit = () => {
+        if (!input.trim() || loading) return;
+        const userMsg = { role:"user", content: input.trim() };
+        const next = [...messages, userMsg];
+        setMessages(next);
+        setInput("");
+        send(next);
+      };
+
+      const suggestionClick = (text) => {
+        if (loading) return;
+        const userMsg = { role:"user", content: text };
+        const next = [...messages, userMsg];
+        setMessages(next);
+        send(next);
+      };
+
+      const niv = NIVEAUX.find(n => n.id === profile.niveau);
+
+      return (
+        <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"Georgia, serif", color:C.text }}>
+          <div style={{ position:"fixed", top:"-15%", right:"-10%", width:"400px", height:"400px", borderRadius:"50%", background:"radial-gradient(circle,rgba(94,234,212,0.08),transparent 70%)", pointerEvents:"none", zIndex:0 }}/>
+          <div style={{ position:"fixed", bottom:"5%", left:"-15%", width:"380px", height:"380px", borderRadius:"50%", background:"radial-gradient(circle,rgba(96,165,250,0.08),transparent 70%)", pointerEvents:"none", zIndex:0 }}/>
+
+          <div style={{ position:"relative", zIndex:1, maxWidth:"640px", margin:"0 auto", padding:"20px 16px calc(env(safe-area-inset-bottom,0px) + 100px)" }}>
+
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"18px" }}>
+              <div>
+                <div style={{ fontSize:"10px", letterSpacing:"3px", color:C.accent3, textTransform:"uppercase" }}>Boussole 🧭</div>
+                <div style={{ fontSize:"12px", color:C.textFaint, fontStyle:"italic" }}>{niv?.emoji} {niv?.label} {niv?.sub}{riasec ? ` · code ${riasec.code}` : ""}</div>
+              </div>
+              <div style={{ display:"flex", gap:"8px" }}>
+                <button onClick={() => setShowBoard(!showBoard)} style={{
+                  background: showBoard ? "rgba(94,234,212,0.16)" : "rgba(255,255,255,0.05)",
+                  border:`1px solid ${showBoard ? "rgba(94,234,212,0.4)" : C.cardBorder}`, borderRadius:"20px",
+                  padding:"8px 14px", color: showBoard ? C.accent : C.textDim, fontSize:"12px", cursor:"pointer",
+                }}>📌 Mes pistes {pistes.length > 0 ? `(${pistes.length})` : ""}</button>
+              </div>
+            </div>
+
+            {showBoard && (
+              <div style={{ marginBottom:"20px", animation:"fadeIn 0.3s ease" }}>
+                {pistes.length === 0 ? (
+                  <div style={{ fontSize:"12px", color:C.textFaint, fontStyle:"italic", padding:"14px" }}>Aucune piste enregistrée pour l'instant — continue la conversation, Boussole en ajoutera ici au fil des échanges.</div>
+                ) : pistes.map((f,i) => <PisteCard key={i} fiche={f} onRemove={() => setPistes(pistes.filter((_,j)=>j!==i))} />)}
+                {pistes.length > 0 && (
+                  <button onClick={() => setShowExport(true)} style={{ width:"100%", marginTop:"6px", background:"rgba(255,184,108,0.12)", border:"1px solid rgba(255,184,108,0.35)", borderRadius:"12px", padding:"12px", color:C.accent3, fontSize:"13px", cursor:"pointer" }}>
+                    📄 Exporter ma synthèse
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div>
+              {messages.map((m,i) => <ChatMessage key={i} msg={m} onSuggestionClick={suggestionClick} />)}
+              {loading && (
+                <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"6px 0" }}>
+                  <span style={{ display:"inline-block", animation:"spin 1.4s linear infinite" }}>🧭</span>
+                  <span style={{ fontSize:"12px", color:C.textFaint, fontStyle:"italic", animation:"pulse 2s ease infinite" }}>Boussole réfléchit…</span>
+                </div>
+              )}
+              {error && (
+                <div style={{ background:"rgba(255,100,80,0.1)", border:"1px solid rgba(255,100,80,0.3)", borderRadius:"10px", padding:"12px 16px", fontSize:"12px", color:"#ff7a5c", marginBottom:"12px" }}>
+                  ⚠️ {error}
+                </div>
+              )}
+              <div ref={endRef}/>
+            </div>
+          </div>
+
+          <div style={{
+            position:"fixed", bottom:0, left:0, right:0, zIndex:10,
+            background:"linear-gradient(0deg,#0a1420 60%,rgba(10,20,32,0))",
+            paddingBottom:"env(safe-area-inset-bottom, 0px)",
+          }}>
+            <div style={{ maxWidth:"640px", margin:"0 auto", padding:"18px 16px", display:"flex", gap:"8px" }}>
+              <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key==="Enter" && submit()}
+                placeholder="Écris ta réponse ou ta question…"
+                style={{ flex:1, background:"rgba(255,255,255,0.06)", border:`1px solid ${C.cardBorder}`, borderRadius:"22px", padding:"13px 18px", color:C.text, fontSize:"13px", outline:"none" }}
+              />
+              <button onClick={submit} disabled={!input.trim() || loading} style={{
+                background: input.trim() && !loading ? C.grad : "rgba(255,255,255,0.06)",
+                border:"none", borderRadius:"50%", width:"46px", height:"46px", flexShrink:0,
+                color: input.trim() && !loading ? "#0a1420" : "rgba(255,255,255,0.2)",
+                fontSize:"16px", cursor: input.trim() && !loading ? "pointer" : "not-allowed",
+              }}>↑</button>
+            </div>
+            <div style={{ textAlign:"center", paddingBottom:"10px" }}>
+              <button onClick={onReset} style={{ background:"transparent", border:"none", color:C.textFaint, fontSize:"10.5px", cursor:"pointer", fontStyle:"italic" }}>
+                🔄 Recommencer une orientation
+              </button>
+            </div>
+          </div>
+
+          {showExport && <ExportModal text={buildSynthesis(profile, riasec, pistes)} onClose={() => setShowExport(false)} />}
+        </div>
+      );
+    }
+
+    // ── ROOT ───────────────────────────────────────────────────────────────
+
+    function loadJSON(key, fallback) {
+      try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch(e) { return fallback; }
+    }
+
+    function App() {
+      const [hasKey, setHasKey] = useState(!!localStorage.getItem("orientation_api_key"));
+      const [profile, setProfile] = useState(() => loadJSON("orientation_profile", null));
+      const [riasec, setRiasec] = useState(() => loadJSON("orientation_riasec", null));
+      const [messages, setMessagesState] = useState(() => loadJSON("orientation_messages", []));
+      const [pistes, setPistesState] = useState(() => loadJSON("orientation_pistes", []));
+
+      const setMessages = useCallback((updater) => {
+        setMessagesState(prev => {
+          const next = typeof updater === "function" ? updater(prev) : updater;
+          localStorage.setItem("orientation_messages", JSON.stringify(next));
+          return next;
+        });
+      }, []);
+
+      const setPistes = useCallback((updater) => {
+        setPistesState(prev => {
+          const next = typeof updater === "function" ? updater(prev) : updater;
+          localStorage.setItem("orientation_pistes", JSON.stringify(next));
+          return next;
+        });
+      }, []);
+
+      const completeOnboarding = (w, r) => {
+        localStorage.setItem("orientation_profile", JSON.stringify(w));
+        localStorage.setItem("orientation_riasec", JSON.stringify(r));
+        setProfile(w); setRiasec(r);
+      };
+
+      const reset = () => {
+        if (!confirm("Recommencer une nouvelle orientation ? Ta conversation actuelle et tes pistes enregistrées seront effacées.")) return;
+        localStorage.removeItem("orientation_profile");
+        localStorage.removeItem("orientation_riasec");
+        localStorage.removeItem("orientation_messages");
+        localStorage.removeItem("orientation_pistes");
+        setProfile(null); setRiasec(null); setMessagesState([]); setPistesState([]);
+      };
+
+      if (!hasKey) return <><SetupScreen onSave={() => setHasKey(true)} /><InstallBanner /></>;
+      if (!profile) return <><OnboardingWizard onComplete={completeOnboarding} /><InstallBanner /></>;
+      return (
+        <>
+          <ChatScreen profile={profile} riasec={riasec} messages={messages} setMessages={setMessages} pistes={pistes} setPistes={setPistes} onReset={reset} />
+          <InstallBanner />
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
