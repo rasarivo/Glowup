@@ -99,25 +99,22 @@
 
     // ── API ────────────────────────────────────────────────────────────────
 
-    async function callAPI(system, messages, tokens = 1400) {
-      const key = localStorage.getItem("orientation_api_key");
-      if (!key) throw new Error("NO_KEY");
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+    async function callAPI(system, messages) {
+      const token = localStorage.getItem("boussole_access_token");
+      if (!token) throw new Error("NO_ACCESS");
+      const res = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": key,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({ model:"claude-sonnet-5", max_tokens:tokens, system, messages }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, system, messages }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || `HTTP ${res.status}`);
+        const e = new Error(err.error || `HTTP ${res.status}`);
+        e.status = res.status;
+        throw e;
       }
       const data = await res.json();
-      return data.content?.map(b => b.text || "").join("\n") || "";
+      return data.text || "";
     }
 
     function extractBlocks(text, tag) {
@@ -197,27 +194,38 @@ ${profile}`;
 
     // ── SETUP SCREEN ───────────────────────────────────────────────────────
 
-    function SetupScreen({ onSave }) {
-      const [key, setKey] = useState("");
-      const [error, setError] = useState("");
-      const [testing, setTesting] = useState(false);
+    // Remplace cette valeur par ton propre Payment Link Stripe une fois créé
+    // (voir instructions de déploiement). Tant qu'elle contient "REPLACE_ME",
+    // l'écran affiche "bientôt disponible" au lieu d'un lien cassé.
+    const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/REPLACE_ME";
 
-      const save = async () => {
-        if (!key.trim().startsWith("sk-ant-")) {
-          setError("La clé doit commencer par « sk-ant-… »");
-          return;
-        }
-        setTesting(true); setError("");
-        try {
-          localStorage.setItem("orientation_api_key", key.trim());
-          await callAPI("Tu es un assistant.", [{ role:"user", content:"Dis juste : OK" }], 10);
-          onSave();
-        } catch(e) {
-          localStorage.removeItem("orientation_api_key");
-          setError("Clé invalide ou erreur de connexion. Vérifie et réessaie.");
-        }
-        setTesting(false);
-      };
+    function PaywallScreen({ onUnlocked }) {
+      const [verifying, setVerifying] = useState(false);
+      const [error, setError] = useState("");
+      const configured = !STRIPE_PAYMENT_LINK.includes("REPLACE_ME");
+
+      useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const sessionId = params.get("session_id");
+        if (!sessionId) return;
+
+        setVerifying(true);
+        fetch("/api/verify-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        })
+          .then(async res => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.token) throw new Error(data.error || "Paiement non confirmé.");
+            localStorage.setItem("boussole_access_token", data.token);
+            window.history.replaceState({}, "", window.location.pathname);
+            onUnlocked();
+          })
+          .catch(e => setError(e.message || "Impossible de vérifier le paiement. Contacte-nous si le prélèvement a bien eu lieu."))
+          .finally(() => setVerifying(false));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
 
       return (
         <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", padding:"24px", fontFamily:"Georgia, serif" }}>
@@ -233,51 +241,51 @@ ${profile}`;
             </div>
 
             <div style={{ background:C.card, border:`1px solid ${C.cardBorder}`, borderRadius:"18px", padding:"28px" }}>
-              <div style={{ fontSize:"13px", color:C.textDim, lineHeight:"1.8", marginBottom:"24px" }}>
-                Pour fonctionner, Boussole a besoin d'une <strong style={{ color:C.accent3 }}>clé API Anthropic</strong> personnelle.
-                Elle reste stockée uniquement sur ton appareil, jamais envoyée ailleurs.
-              </div>
+              {verifying ? (
+                <div style={{ textAlign:"center", padding:"20px 0" }}>
+                  <div style={{ fontSize:"30px", animation:"spin 1.4s linear infinite", display:"inline-block", marginBottom:"12px" }}>🧭</div>
+                  <div style={{ fontSize:"13px", color:C.textDim, fontStyle:"italic" }}>Vérification du paiement…</div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize:"13px", color:C.textDim, lineHeight:"1.8", marginBottom:"18px" }}>
+                    Un accès complet à Boussole pour <strong style={{ color:C.accent3 }}>1€, une seule fois</strong>. Aucun abonnement, aucun piège — tu peux essayer sans y réfléchir à deux fois.
+                  </div>
 
-              <a href="https://console.anthropic.com/account/keys" target="_blank" rel="noopener" style={{
-                display:"block", textAlign:"center", background:"rgba(94,234,212,0.1)",
-                border:"1px solid rgba(94,234,212,0.35)", borderRadius:"10px",
-                padding:"11px", color:C.accent, fontSize:"12px", textDecoration:"none",
-                marginBottom:"20px",
-              }}>
-                🔑 Obtenir ma clé sur console.anthropic.com →
-              </a>
+                  <ul style={{ margin:"0 0 22px", padding:0, listStyle:"none", display:"flex", flexDirection:"column", gap:"9px" }}>
+                    {["Conversation illimitée pendant ta session", "Aucune clé ni compte à créer ailleurs", "Paiement sécurisé par Stripe — ta carte ne transite jamais par nous"].map((t,i) => (
+                      <li key={i} style={{ fontSize:"12.5px", color:C.textDim, display:"flex", gap:"8px", alignItems:"flex-start" }}>
+                        <span style={{ color:C.accent, flexShrink:0 }}>✓</span>{t}
+                      </li>
+                    ))}
+                  </ul>
 
-              <div style={{ marginBottom:"16px" }}>
-                <div style={{ fontSize:"10px", letterSpacing:"2px", color:C.textFaint, textTransform:"uppercase", marginBottom:"8px" }}>Ta clé API</div>
-                <input
-                  type="password"
-                  value={key}
-                  onChange={e => { setKey(e.target.value); setError(""); }}
-                  onKeyDown={e => e.key==="Enter" && save()}
-                  placeholder="sk-ant-api03-…"
-                  style={{
-                    width:"100%", background:"rgba(255,255,255,0.06)", border:`1px solid ${error?"rgba(255,100,80,0.5)":"rgba(255,255,255,0.12)"}`,
-                    borderRadius:"10px", padding:"13px 16px", color:C.text, fontSize:"14px",
-                    outline:"none", fontFamily:"monospace", letterSpacing:"1px",
-                  }}
-                />
-                {error && <div style={{ fontSize:"11px", color:"#ff7a5c", marginTop:"6px" }}>{error}</div>}
-              </div>
+                  {error && (
+                    <div style={{ background:"rgba(255,100,80,0.1)", border:"1px solid rgba(255,100,80,0.3)", borderRadius:"10px", padding:"11px 14px", fontSize:"11.5px", color:"#ff7a5c", marginBottom:"16px", lineHeight:"1.6" }}>
+                      ⚠️ {error}
+                    </div>
+                  )}
 
-              <button onClick={save} disabled={!key.trim() || testing} style={{
-                width:"100%", background: !key.trim() ? "rgba(255,255,255,0.06)" : C.grad,
-                border:"none", borderRadius:"12px", padding:"15px",
-                color: !key.trim() ? "rgba(255,255,255,0.2)" : "#0a1420",
-                fontSize:"15px", fontWeight:"600", cursor: !key.trim() ? "not-allowed" : "pointer", fontFamily:"Georgia, serif",
-                boxShadow: key.trim() ? "0 8px 32px rgba(94,234,212,0.25)" : "none",
-              }}>
-                {testing ? "Vérification…" : "Commencer 🧭"}
-              </button>
+                  {configured ? (
+                    <a href={STRIPE_PAYMENT_LINK} style={{
+                      display:"block", textAlign:"center", textDecoration:"none",
+                      width:"100%", background:C.grad, border:"none", borderRadius:"12px", padding:"15px",
+                      color:"#0a1420", fontSize:"15px", fontWeight:"600", fontFamily:"Georgia, serif",
+                      boxShadow:"0 8px 32px rgba(94,234,212,0.25)",
+                    }}>
+                      Payer 1€ et commencer 🧭
+                    </a>
+                  ) : (
+                    <div style={{ textAlign:"center", fontSize:"12.5px", color:C.textFaint, fontStyle:"italic", padding:"14px", border:`1px dashed ${C.cardBorder}`, borderRadius:"12px" }}>
+                      Le paiement arrive très bientôt — reviens dans quelques jours 🧭
+                    </div>
+                  )}
 
-              <div style={{ fontSize:"11px", color:C.textFaint, textAlign:"center", marginTop:"14px", lineHeight:"1.7" }}>
-                La clé n'est jamais envoyée ailleurs qu'à Anthropic.<br/>
-                Elle est stockée uniquement sur cet appareil.
-              </div>
+                  <div style={{ fontSize:"10.5px", color:C.textFaint, textAlign:"center", marginTop:"14px", lineHeight:"1.7" }}>
+                    Propulsé par Stripe · Paiement sécurisé
+                  </div>
+                </>
+              )}
             </div>
             <div style={{ textAlign:"center", marginTop:"24px" }}>
               <a href="index.html" style={{ color:C.textFaint, fontSize:"11px", textDecoration:"none", fontStyle:"italic" }}>✨ Voir aussi Glow Up &amp; Sérénité →</a>
@@ -687,12 +695,17 @@ ${profile}`;
         setLoading(true); setError("");
         try {
           const apiMessages = history.map(m => ({ role:m.role, content:m.content }));
-          const reply = await callAPI(system, apiMessages, 1600);
+          const reply = await callAPI(system, apiMessages);
           const { blocks:fiches } = extractBlocks(reply, "fiche");
           mergePistes(fiches);
           setMessages(prev => [...prev, { role:"assistant", content:reply }]);
         } catch(e) {
-          setError(e.message === "NO_KEY" ? "Clé API manquante." : (e.message || "Erreur de connexion."));
+          if (e.status === 403) {
+            localStorage.removeItem("boussole_access_token");
+            window.location.reload();
+            return;
+          }
+          setError(e.message === "NO_ACCESS" ? "Accès manquant — recharge la page." : (e.message || "Erreur de connexion."));
         }
         setLoading(false);
       }, [system, mergePistes, setMessages]);
@@ -813,7 +826,7 @@ ${profile}`;
     }
 
     function App() {
-      const [hasKey, setHasKey] = useState(!!localStorage.getItem("orientation_api_key"));
+      const [hasAccess, setHasAccess] = useState(!!localStorage.getItem("boussole_access_token"));
       const [profile, setProfile] = useState(() => loadJSON("orientation_profile", null));
       const [riasec, setRiasec] = useState(() => loadJSON("orientation_riasec", null));
       const [messages, setMessagesState] = useState(() => loadJSON("orientation_messages", []));
@@ -850,7 +863,7 @@ ${profile}`;
         setProfile(null); setRiasec(null); setMessagesState([]); setPistesState([]);
       };
 
-      if (!hasKey) return <><SetupScreen onSave={() => setHasKey(true)} /><InstallBanner /></>;
+      if (!hasAccess) return <><PaywallScreen onUnlocked={() => setHasAccess(true)} /><InstallBanner /></>;
       if (!profile) return <><OnboardingWizard onComplete={completeOnboarding} /><InstallBanner /></>;
       return (
         <>

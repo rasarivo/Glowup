@@ -1,0 +1,10 @@
+{
+  "name": "boussole-functions",
+  "private": true,
+  "dependencies": {
+    "@netlify/blobs": "^11.1.0"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^6.0.0"
+  }
+}
