@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "Ensemble",
+    "slug": "ensemble-dating",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "ensemble",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ensemble.dating",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Ensemble utilise ta position pour te proposer des personnes et des groupes proches de chez toi, partageant tes loisirs et sports.",
+        "NSCameraUsageDescription": "Ensemble a besoin de la caméra pour ajouter des photos à ton profil.",
+        "NSPhotoLibraryUsageDescription": "Ensemble a besoin d'accéder à tes photos pour compléter ton profil."
+      }
+    },
+    "android": {
+      "package": "com.ensemble.dating",
+      "adaptiveIcon": {
+        "backgroundColor": "#FF5A5F",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "READ_MEDIA_IMAGES"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Ensemble utilise ta position pour te proposer des personnes et des groupes proches de chez toi, partageant tes loisirs et sports."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Ensemble a besoin d'accéder à tes photos pour compléter ton profil.",
+          "cameraPermission": "Ensemble a besoin de la caméra pour ajouter des photos à ton profil."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
