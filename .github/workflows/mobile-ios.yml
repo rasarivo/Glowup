@@ -1,0 +1,67 @@
+# Compile l'application iOS sur un Mac GitHub.
+# - Sans secrets : compilation pour le simulateur (vérifie que le projet compile).
+# - Avec la clé API App Store Connect : archive signée automatiquement et envoyée sur TestFlight.
+name: Mobile iOS
+
+on:
+  push:
+    paths: ["cap-micro.html", "mobile/**", ".github/workflows/mobile-ios.yml"]
+  workflow_dispatch:
+    inputs:
+      envoyer_testflight:
+        description: "Archiver et envoyer sur TestFlight / App Store Connect"
+        type: boolean
+        default: false
+
+jobs:
+  ios:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      CAPMICRO_AI_PROXY_URL: ${{ vars.CAPMICRO_AI_PROXY_URL }}
+      CAPMICRO_AI_CLIENT_TOKEN: ${{ vars.CAPMICRO_AI_CLIENT_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: mobile/package-lock.json }
+      - run: npm ci
+      - run: node scripts/build-web.mjs
+      - run: npx cap sync ios
+
+      - name: Compilation simulateur
+        if: ${{ !inputs.envoyer_testflight }}
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -20
+
+      - name: Archive et envoi sur App Store Connect
+        if: ${{ inputs.envoyer_testflight }}
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s' "$ASC_KEY_P8" > "$KEY_PATH"
+          AUTH="-allowProvisioningUpdates -authenticationKeyPath $KEY_PATH -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} MARKETING_VERSION=${{ vars.CAPMICRO_VERSION_NAME || '1.0.0' }} \
+            $AUTH archive | tail -20
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" $AUTH | tail -20

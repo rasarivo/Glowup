@@ -1,0 +1,11 @@
+{
+  "name": "cap-micro-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Proxy du Conseiller IA de Cap Micro (fonction Netlify) : la clé API Anthropic reste côté serveur",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "@netlify/blobs": "^11.1.0"
+  }
+}

@@ -1,0 +1,6 @@
+# Déploiement : Netlify > Add new site > Import from Git > dépôt Glowup, « Base directory » = server
+[build]
+  publish = "public"
+
+[functions]
+  node_bundler = "esbuild"

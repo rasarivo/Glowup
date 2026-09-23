@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cap Micro — le copilote de l'auto-entrepreneur</title>
+  <meta name="description" content="Toutes les démarches pour créer et gérer votre auto-entreprise, des factures conformes prêtes pour la facture électronique, le suivi de votre CA et un conseiller IA. Application iPhone et Android.">
+  <meta property="og:title" content="Cap Micro — le copilote de l'auto-entrepreneur">
+  <meta property="og:description" content="Démarches, factures conformes, facture électronique 2026-2027, suivi du CA et conseiller IA.">
+  <meta property="og:image" content="https://rasarivo.github.io/Glowup/store/graphics/play-feature-graphic.png">
+  <meta name="theme-color" content="#0b1220">
+  <link rel="icon" href="icon.png">
+  <style>
+    :root { --bg:#0b1220; --card:rgba(255,255,255,0.05); --line:rgba(255,255,255,0.1); --text:#edf1f7; --dim:rgba(237,241,247,0.65); --faint:rgba(237,241,247,0.4); --green:#34d399; --gold:#fbbf24; --indigo:#818cf8; --grad:linear-gradient(135deg,#fbbf24,#34d399,#818cf8); }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:linear-gradient(160deg,#0b1220,#101a2e 50%,#0c1526); color:var(--text); font-family:Georgia,"DejaVu Serif",serif; line-height:1.6; min-height:100vh; }
+    a { color:var(--green); }
+    .wrap { max-width:1040px; margin:0 auto; padding:0 16px; }
+    header { display:flex; align-items:center; gap:10px; padding:18px 0; }
+    header img { width:36px; height:36px; border-radius:9px; }
+    header span { font-size:14px; letter-spacing:3px; text-transform:uppercase; color:var(--gold); }
+    .hero { display:grid; grid-template-columns:1.1fr 0.9fr; gap:40px; align-items:center; padding:30px 0 50px; }
+    h1 { font-size:clamp(2rem,5vw,3.2rem); font-weight:400; line-height:1.15; margin-bottom:16px; }
+    h1 em { font-style:normal; background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    .lead { color:var(--dim); font-size:1.08rem; margin-bottom:24px; }
+    .stores { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+    .store { display:inline-flex; flex-direction:column; min-width:190px; padding:11px 18px; border-radius:14px; text-decoration:none; background:#000; border:1px solid rgba(255,255,255,0.35); color:#fff; }
+    .store small { font-size:11px; opacity:0.75; } .store strong { font-size:18px; font-family:-apple-system,"Segoe UI",Roboto,sans-serif; font-weight:600; }
+    .store.soon { opacity:0.55; pointer-events:none; }
+    .web { font-size:13px; color:var(--faint); }
+    .phone { width:100%; max-width:340px; justify-self:center; border-radius:34px; border:6px solid rgba(255,255,255,0.12); box-shadow:0 30px 80px rgba(0,0,0,0.5); }
+    .alert { background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.35); border-radius:16px; padding:18px 20px; margin-bottom:46px; }
+    .alert strong { color:var(--gold); }
+    h2 { font-size:1.7rem; font-weight:400; margin-bottom:20px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:50px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; }
+    .card b { display:block; font-weight:400; font-size:1.05rem; margin-bottom:6px; }
+    .card p { color:var(--dim); font-size:0.93rem; }
+    .shots { display:flex; gap:14px; overflow-x:auto; padding-bottom:10px; margin-bottom:50px; scroll-snap-type:x mandatory; }
+    .shots img { height:460px; border-radius:18px; scroll-snap-align:start; flex-shrink:0; }
+    details { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 18px; margin-bottom:10px; }
+    summary { cursor:pointer; }
+    details p { color:var(--dim); margin-top:8px; font-size:0.95rem; }
+    footer { border-top:1px solid var(--line); margin-top:50px; padding:24px 0 40px; color:var(--faint); font-size:13px; }
+    @media (max-width:760px) { .hero { grid-template-columns:1fr; } .phone { max-width:260px; } .shots img { height:380px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header><img src="icon.png" alt=""><span>Cap Micro</span></header>
+
+    <section class="hero">
+      <div>
+        <h1>Votre auto-entreprise,<br><em>sans rien oublier.</em></h1>
+        <p class="lead">Cap Micro liste toutes les démarches obligatoires pour votre situation, crée des factures conformes, suit votre chiffre d'affaires et vos cotisations, et répond à vos questions 24 h/24.</p>
+        <div class="stores">
+          <a class="store" id="ios" href="#"><small>Télécharger dans</small><strong>l'App Store</strong></a>
+          <a class="store" id="android" href="#"><small>Disponible sur</small><strong>Google Play</strong></a>
+        </div>
+        <p class="web" id="web-note">Pas encore sur les stores ? <a href="../cap-micro.html">Essayez la version web gratuite</a>.</p>
+      </div>
+      <img class="phone" src="../store/screenshots/raw/01-demarches.png" alt="Écran des démarches de Cap Micro">
+    </section>
+
+    <div class="alert">
+      <strong>Facture électronique :</strong> depuis le 1er septembre 2026, les micro-entrepreneurs doivent pouvoir recevoir des factures électroniques. Ils devront en émettre à partir du 1er septembre 2027 : il reste <strong id="days">…</strong> jours pour s'y préparer. Cap Micro vous guide pas à pas.
+    </div>
+
+    <h2>Tout ce qu'il faut, au même endroit</h2>
+    <div class="grid">
+      <div class="card"><b>🏁 Les démarches, dans l'ordre</b><p>Une feuille de route adaptée à votre activité et à votre situation (salarié, demandeur d'emploi, étudiant…), avec les liens officiels et un dossier prêt pour le guichet unique.</p></div>
+      <div class="card"><b>🧾 Des factures conformes</b><p>Devis et factures avec toutes les mentions obligatoires vérifiées, numérotation automatique, PDF et export au format structuré.</p></div>
+      <div class="card"><b>📊 Un suivi sans tableur</b><p>Livre des recettes, cotisations estimées, alertes sur les seuils de TVA et du régime, rappels des échéances Urssaf, CFE et impôts.</p></div>
+      <div class="card"><b>💬 Un conseiller disponible</b><p>Prix, démarches, courriers, relances, CGV, développement : des réponses concrètes qui tiennent compte de vos chiffres.</p></div>
+    </div>
+
+    <h2>Aperçu</h2>
+    <div class="shots">
+      <img src="../store/screenshots/google-play/01-demarches.png" alt="Démarches" loading="lazy">
+      <img src="../store/screenshots/google-play/02-facture.png" alt="Facture conforme" loading="lazy">
+      <img src="../store/screenshots/google-play/03-reforme.png" alt="Facture électronique" loading="lazy">
+      <img src="../store/screenshots/google-play/04-suivi.png" alt="Suivi du CA" loading="lazy">
+      <img src="../store/screenshots/google-play/05-conseiller.png" alt="Conseiller" loading="lazy">
+    </div>
+
+    <h2>Questions fréquentes</h2>
+    <details><summary>Cap Micro fait-il les démarches à ma place ?</summary><p>Non : les formalités se font sur les sites officiels (gratuits), avec votre identité. Cap Micro vous dit exactement quoi faire, dans quel ordre, et prépare les informations à saisir.</p></details>
+    <details><summary>Est-ce une plateforme agréée pour la facture électronique ?</summary><p>Non. Cap Micro vous aide à choisir une plateforme agréée, prépare vos factures avec les nouvelles mentions et les exporte au format structuré. L'envoi officiel passe par la plateforme agréée que vous choisissez.</p></details>
+    <details><summary>Où sont stockées mes données ?</summary><p>Sur votre téléphone. Vous n'avez pas de compte à créer. Le conseiller IA reçoit seulement ce qui est nécessaire pour vous répondre, et seulement après votre accord. <a href="confidentialite.html">Politique de confidentialité</a>.</p></details>
+    <details><summary>Remplace-t-il un expert-comptable ?</summary><p>Non. C'est un outil d'aide à la gestion au quotidien. Pour un cas complexe (TVA internationale, changement de statut, litige), faites-vous accompagner.</p></details>
+
+    <footer>
+      Cap Micro · règles à jour de septembre 2026 · <a href="confidentialite.html">Confidentialité</a>
+    </footer>
+  </div>
+
+  <script>
+    // ── Liens des stores : à compléter après publication ──
+    const STORES = {
+      androidPackage: "fr.capmicro.app",
+      androidLive: false,     // passer à true quand l'app est publiée sur Google Play
+      iosAppId: "",           // identifiant Apple (ex : "6740000000"), vide tant que l'app n'est pas publiée
+      iosProviderToken: "",   // App Store Connect > Analytics > « Campaign link » : paramètre pt
+    };
+
+    // Attribution : ?src=instagram&c=reforme-sept → visible dans Play Console (UTM) et App Store Connect (campagnes)
+    const q = new URLSearchParams(location.search);
+    const src = (q.get("src") || "site").replace(/[^a-z0-9_-]/gi, "").slice(0, 30);
+    const camp = (q.get("c") || "organique").replace(/[^a-z0-9_-]/gi, "").slice(0, 40);
+
+    const androidUrl = STORES.androidLive ? `https://play.google.com/store/apps/details?id=${STORES.androidPackage}&referrer=${encodeURIComponent(`utm_source=${src}&utm_medium=social&utm_campaign=${camp}`)}` : "";
+    const iosUrl = STORES.iosAppId ? `https://apps.apple.com/fr/app/id${STORES.iosAppId}?mt=8${STORES.iosProviderToken ? `&pt=${STORES.iosProviderToken}` : ""}&ct=${encodeURIComponent(`${src}-${camp}`.slice(0, 100))}` : "";
+
+    for (const [id, url, label] of [["ios", iosUrl, "l'App Store"], ["android", androidUrl, "Google Play"]]) {
+      const el = document.getElementById(id);
+      if (url) el.href = url;
+      else { el.classList.add("soon"); el.querySelector("small").textContent = "Bientôt sur"; }
+    }
+    if (iosUrl && androidUrl) document.getElementById("web-note").style.display = "none";
+
+    // Lien intelligent : ?go=1 envoie directement vers le bon store selon le téléphone
+    if (q.get("go") === "1") {
+      const ua = navigator.userAgent;
+      const target = /iphone|ipad|ipod/i.test(ua) ? iosUrl : /android/i.test(ua) ? androidUrl : "";
+      if (target) location.replace(target);
+    }
+
+    const days = Math.max(0, Math.ceil((new Date("2027-09-01T00:00:00+02:00") - new Date()) / 86400000));
+    document.getElementById("days").textContent = days;
+  </script>
+</body>
+</html>

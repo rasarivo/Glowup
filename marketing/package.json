@@ -1,0 +1,18 @@
+{
+  "name": "cap-micro-promo-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent de promotion continue de Cap Micro sur les réseaux sociaux",
+  "scripts": {
+    "generer": "node agent/run.mjs --mode=generer",
+    "publier": "node agent/run.mjs --mode=publier",
+    "bilan": "node agent/run.mjs --mode=bilan",
+    "test": "node agent/run.mjs --mode=generer --mock --force --date=2000-01-01 && node agent/run.mjs --mode=publier --dry-run --date=2000-01-01"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "playwright": "1.56.1",
+    "zod": "^4.6.5"
+  }
+}

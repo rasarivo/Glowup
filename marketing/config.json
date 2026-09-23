@@ -1,0 +1,37 @@
+{
+  "produit": {
+    "nom": "Cap Micro",
+    "gratuit": true,
+    "storesEnLigne": false,
+    "lienAccueil": "https://rasarivo.github.io/Glowup/capmicro/",
+    "lienWeb": "https://rasarivo.github.io/Glowup/cap-micro.html"
+  },
+  "publication": {
+    "auto": false,
+    "reseaux": {
+      "instagram": {
+        "actif": true,
+        "auto": true
+      },
+      "facebook": {
+        "actif": true,
+        "auto": true
+      },
+      "linkedin": {
+        "actif": true,
+        "auto": true
+      },
+      "tiktok": {
+        "actif": true,
+        "auto": false
+      },
+      "x": {
+        "actif": false,
+        "auto": false
+      }
+    }
+  },
+  "modele": "claude-opus-5",
+  "depot": "rasarivo/Glowup",
+  "branche": "main"
+}

@@ -34,10 +34,10 @@
     @keyframes fadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
     @keyframes pulse { 0%,100%{opacity:0.6} 50%{opacity:1} }
     @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
-    #print-area { display: none; }
+    #print-area { position: absolute; left: -10000px; top: 0; width: 794px; }
     @media print {
       body > *:not(#print-area) { display: none !important; }
-      #print-area { display: block !important; }
+      #print-area { position: static; width: auto; }
       html, body { background: #fff !important; height: auto; }
     }
   </style>
@@ -125,6 +125,7 @@
     const addDays = (iso, d) => { const x = new Date(iso + "T12:00:00"); x.setDate(x.getDate() + d); return x.toISOString().slice(0,10); };
     const daysBetween = (a, b) => Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000);
     const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    const pct = (n) => String(n).replace(".", ",");
     const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
     const activiteOf = (p) => ACTIVITES.find(a => a.id === p?.activite) || ACTIVITES[1];
     const isB2C = (p) => p?.clients === "b2c" || p?.clients === "mixte";
@@ -133,13 +134,71 @@
     const iso = (y, m, d) => `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
     const escXml = (s) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 
-    function downloadFile(name, content, type = "text/plain;charset=utf-8") {
-      const blob = new Blob([content], { type });
+    // ── CONFIGURATION & MOBILE NATIF ────────────────────────────────────
+    // La version App Store / Play Store injecte window.CAPMICRO_CONFIG (voir mobile/scripts/build-web.mjs).
+
+    const APP_CONFIG = {
+      aiProxyUrl: "",      // proxy serveur du Conseiller (la clé API reste sur le serveur)
+      aiClientToken: "",   // jeton public de l'application, vérifié par le proxy
+      vendor: {
+        jspdf: "https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js",
+        html2canvas: "https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js",
+      },
+      ...(window.CAPMICRO_CONFIG || {}),
+    };
+    const IS_NATIVE = !!(window.Capacitor?.isNativePlatform && window.Capacitor.isNativePlatform());
+    const nativePlugin = (name) => IS_NATIVE && window.Capacitor.registerPlugin ? window.Capacitor.registerPlugin(name) : null;
+
+    const loadedScripts = {};
+    function loadScript(src) {
+      if (!loadedScripts[src]) loadedScripts[src] = new Promise((resolve, reject) => {
+        const el = document.createElement("script");
+        el.src = src; el.onload = resolve; el.onerror = () => { delete loadedScripts[src]; reject(new Error("Chargement impossible : " + src)); };
+        document.head.appendChild(el);
+      });
+      return loadedScripts[src];
+    }
+
+    // Enregistre un fichier : téléchargement sur le web, feuille de partage sur mobile.
+    // content : texte, ou { base64 } pour un fichier binaire.
+    async function downloadFile(name, content, type = "text/plain;charset=utf-8") {
+      if (IS_NATIVE) {
+        try {
+          const Filesystem = nativePlugin("Filesystem"), Share = nativePlugin("Share");
+          const isB64 = typeof content === "object" && content.base64;
+          const res = await Filesystem.writeFile({ path:name, data: isB64 ? content.base64 : content, directory:"CACHE", ...(isB64 ? {} : { encoding:"utf8" }) });
+          await Share.share({ title:name, files:[res.uri] });
+        } catch(e) {
+          if (!/cancel/i.test(e?.message || "")) alert("Impossible de partager le fichier : " + (e?.message || e));
+        }
+        return;
+      }
+      const blob = typeof content === "object" && content.base64
+        ? new Blob([Uint8Array.from(atob(content.base64), c => c.charCodeAt(0))], { type })
+        : new Blob([content], { type });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = name;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    // PDF d'un document rendu dans #print-area (A4, multi-pages)
+    async function exportPdf(filename) {
+      await loadScript(APP_CONFIG.vendor.html2canvas);
+      await loadScript(APP_CONFIG.vendor.jspdf);
+      const el = document.getElementById("print-area");
+      const canvas = await window.html2canvas(el, { scale:2, backgroundColor:"#ffffff" });
+      const pdf = new window.jspdf.jsPDF({ unit:"mm", format:"a4" });
+      const pageW = 210, pageH = 297;
+      const imgH = canvas.height * pageW / canvas.width;
+      const img = canvas.toDataURL("image/jpeg", 0.92);
+      for (let y = 0; y < imgH; y += pageH) {
+        if (y > 0) pdf.addPage();
+        pdf.addImage(img, "JPEG", 0, -y, pageW, imgH);
+      }
+      const base64 = pdf.output("datauristring").split(",")[1];
+      await downloadFile(filename, { base64 }, "application/pdf");
     }
 
     // ── CHECKLIST DE CRÉATION (règles déterministes : rien n'est oublié) ──
@@ -224,12 +283,12 @@
         lien:{ label:"Base marques INPI", url:"https://data.inpi.fr" } });
 
       add({ id:"p_simulation", phase:"preparer", obligatoire:false, titre:"Simuler tes revenus, cotisations et impôts",
-        pourquoi:`En ${a.label.toLowerCase()}, tu paieras environ ${a.taux} % de cotisations sociales sur ton chiffre d'affaires encaissé (+ ${a.cfp} % de formation professionnelle), sans pouvoir déduire tes frais. Il faut fixer tes prix en conséquence.`,
+        pourquoi:`En ${a.label.toLowerCase()}, tu paieras environ ${pct(a.taux)} % de cotisations sociales sur ton chiffre d'affaires encaissé (+ ${pct(a.cfp)} % de formation professionnelle), sans pouvoir déduire tes frais. Il faut fixer tes prix en conséquence.`,
         comment:["Utilise le simulateur officiel de l'Urssaf","Ou l'onglet Suivi de Cap Micro une fois ton activité lancée"],
         lien:{ label:"Simulateur mon-entreprise.urssaf.fr", url:"https://mon-entreprise.urssaf.fr/simulateurs/auto-entrepreneur" } });
 
       add({ id:"p_vl", phase:"preparer", obligatoire:false, titre:"Décider de l'option pour le versement libératoire de l'impôt",
-        pourquoi:`Tu paies l'impôt sur le revenu en même temps que tes cotisations (${a.vl} % du CA). Intéressant si ton foyer est peu ou pas imposé… mais pas toujours : il faut simuler. Condition : revenu fiscal de référence de l'avant-dernière année ≤ plafond de la 2e tranche du barème par part.`,
+        pourquoi:`Tu paies l'impôt sur le revenu en même temps que tes cotisations (${pct(a.vl)} % du CA). Intéressant si ton foyer est peu ou pas imposé… mais pas toujours : il faut simuler. Condition : revenu fiscal de référence de l'avant-dernière année ≤ plafond de la 2e tranche du barème par part.`,
         comment:["Regarde ton revenu fiscal de référence sur ton avis d'impôt N-2","Compare avec le régime classique (abattement de " + a.abattement + " %)","Option à choisir à la création, ou avant le 30 septembre pour l'année suivante"],
         lien:{ label:"Versement libératoire", url:"https://www.autoentrepreneur.urssaf.fr/portail/accueil/sinformer-sur-le-statut/lessentiel-du-statut.html" } });
 
@@ -442,7 +501,25 @@
 
     const KEY_STORAGE = "capmicro_api_key";
 
+    const aiAvailable = () => !!APP_CONFIG.aiProxyUrl || !!localStorage.getItem(KEY_STORAGE);
+
+    function installId() {
+      let id = localStorage.getItem("capmicro_install_id");
+      if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : uid() + uid()); localStorage.setItem("capmicro_install_id", id); }
+      return id;
+    }
+
     async function callAPI(system, messages, tokens = 1800) {
+      if (APP_CONFIG.aiProxyUrl) {
+        const res = await fetch(APP_CONFIG.aiProxyUrl, {
+          method: "POST",
+          headers: { "Content-Type":"application/json", "x-capmicro-client": APP_CONFIG.aiClientToken, "x-capmicro-install": installId() },
+          body: JSON.stringify({ system, messages, max_tokens:tokens }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error?.message || (res.status === 429 ? "Limite quotidienne du Conseiller atteinte, réessaie demain." : `HTTP ${res.status}`));
+        return data.content?.map(b => b.text || "").join("\n") || "";
+      }
       const key = localStorage.getItem(KEY_STORAGE);
       if (!key) throw new Error("NO_KEY");
       const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -481,7 +558,7 @@
         `Prénom : ${p.prenom || "non précisé"}`,
         `État : ${p.etat === "creee" ? `micro-entreprise déjà créée${p.siret ? ` (SIRET ${p.siret})` : ""}` : "projet de création"}`,
         `Activité décrite : ${p.activiteDesc || "non précisée"}`,
-        `Catégorie : ${a.label} (${a.nature}, chambre : ${a.chambre}) — cotisations ${a.taux} % + CFP ${a.cfp} %`,
+        `Catégorie : ${a.label} (${a.nature}, chambre : ${a.chambre}) — cotisations ${pct(a.taux)} % + CFP ${pct(a.cfp)} %`,
         `Activité artisanale réglementée : ${p.reglementee ? "oui" : "non"} · Travaux du bâtiment : ${p.batiment ? "oui" : "non"}`,
         `Situation actuelle : ${SITUATIONS.find(s => s.id === p.situation)?.label || "non précisée"}`,
         `Clientèle : ${CLIENTS.find(c => c.id === p.clients)?.label || "non précisée"}`,
@@ -728,6 +805,7 @@ ${ctx.actions}`;
     function InstallBanner() {
       const [visible, setVisible] = useState(false);
       useEffect(() => {
+        if (IS_NATIVE) return;
         const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
         const isAndroid = /android/i.test(navigator.userAgent);
         const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
@@ -1335,6 +1413,7 @@ ${taxes}
       const client = clients.find(c => c.id === doc.clientId);
       const locked = !!doc.numero && doc.type === "facture";
       const [preview, setPreview] = useState(false);
+      const [pdfBusy, setPdfBusy] = useState(false);
       const [paid, setPaid] = useState({ date: todayISO(), mode:"Virement" });
       const checks = conformite(doc, ent, client, profile);
       const ko = checks.filter(c => !c.ok);
@@ -1440,7 +1519,13 @@ ${taxes}
             <div onClick={() => setPreview(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:3000, overflowY:"auto", padding:"16px" }}>
               <div onClick={e => e.stopPropagation()} style={{ maxWidth:"780px", margin:"0 auto" }}>
                 <div className="no-print" style={{ display:"flex", gap:"8px", marginBottom:"10px" }}>
-                  <Btn kind="primary" onClick={() => window.print()}>🖨 Imprimer / Enregistrer en PDF</Btn>
+                  <Btn kind="primary" disabled={pdfBusy} onClick={async () => {
+                    setPdfBusy(true);
+                    try { await exportPdf(`${doc.numero || (doc.type === "facture" ? "facture-brouillon" : "devis-brouillon")}.pdf`); }
+                    catch(e) { alert("Création du PDF impossible : " + e.message); }
+                    setPdfBusy(false);
+                  }}>{pdfBusy ? "Création du PDF…" : "📄 Télécharger le PDF"}</Btn>
+                  {!IS_NATIVE && <Btn onClick={() => window.print()}>🖨 Imprimer</Btn>}
                   <Btn onClick={() => setPreview(false)}>Fermer</Btn>
                 </div>
                 <InvoicePaper doc={doc} ent={ent} client={client} p={profile} />
@@ -1684,7 +1769,7 @@ ${taxes}
               {"JFMAMJJASOND".split("").map((m,i) => <div key={i} style={{ flex:1, textAlign:"center" }}>{m}</div>)}
             </div>
             <div style={{ fontSize:"11px", color:C.textFaint, marginTop:"10px" }}>
-              Taux appliqués : {a.taux} % de cotisations + {a.cfp} % CFP{profile.vl === "oui" ? ` + ${a.vl} % d'impôt` : ""}{profile.acre === "oui" ? " (ACRE prise en compte sur la 1re période)" : ""}. Estimation indicative.
+              Taux appliqués : {pct(a.taux)} % de cotisations + {pct(a.cfp)} % CFP{profile.vl === "oui" ? ` + ${pct(a.vl)} % d'impôt` : ""}{profile.acre === "oui" ? " (ACRE prise en compte sur la 1re période)" : ""}. Estimation indicative.
             </div>
           </Card>
 
@@ -1838,6 +1923,7 @@ ${taxes}
 
     function ConseillerTab({ profile, store, patch, pending, clearPending, onNeedKey, hasKey }) {
       const [input, setInput] = useState("");
+      const [askConsent, setAskConsent] = useState(false);
       const [loading, setLoading] = useState(false);
       const [error, setError] = useState("");
       const endRef = useRef(null);
@@ -1860,7 +1946,8 @@ ${taxes}
 
       const send = useCallback(async (text) => {
         if (!text.trim() || loading) return;
-        if (!localStorage.getItem(KEY_STORAGE)) { setInput(text); onNeedKey(); return; }
+        if (!aiAvailable()) { setInput(text); onNeedKey(); return; }
+        if (!store.aiConsent) { setInput(text); setAskConsent(true); return; }
         const next = [...messages, { role:"user", content:text.trim() }];
         setMessages(next); setInput(""); setLoading(true); setError("");
         try {
@@ -1873,7 +1960,7 @@ ${taxes}
           setError(e.message === "NO_KEY" ? "Clé API manquante." : (e.message || "Erreur de connexion."));
         }
         setLoading(false);
-      }, [messages, loading, profile, ctx, store.actions, patch, onNeedKey]);
+      }, [messages, loading, profile, ctx, store.actions, store.aiConsent, patch, onNeedKey]);
 
       useEffect(() => {
         if (pending && !loading) { clearPending(); send(pending); }
@@ -1882,6 +1969,19 @@ ${taxes}
 
       return (
         <div>
+          {askConsent && (
+            <Card style={{ borderColor:"rgba(52,211,153,0.4)" }}>
+              <div style={{ fontSize:"13px", color:C.accent, marginBottom:"6px" }}>🔒 Avant de commencer</div>
+              <div style={{ fontSize:"12px", color:C.textDim, lineHeight:"1.7", marginBottom:"10px" }}>
+                Pour te répondre, le Conseiller envoie ta question, ton profil (activité, situation, options), l'avancement de tes démarches et tes totaux de chiffre d'affaires à <strong>Anthropic (modèle Claude)</strong>, un service d'IA tiers. Le détail de tes factures, ton fichier clients et ton IBAN ne sont pas envoyés, sauf ce que tu écris toi-même dans une question (par exemple une demande de relance). Ces données ne servent pas à entraîner les modèles d'IA.
+                Tu peux retirer ton accord à tout moment dans les réglages.
+              </div>
+              <div style={{ display:"flex", gap:"8px" }}>
+                <Btn kind="primary" onClick={() => { patch({ aiConsent: todayISO() }); setAskConsent(false); }}>J'accepte</Btn>
+                <Btn onClick={() => setAskConsent(false)}>Pas maintenant</Btn>
+              </div>
+            </Card>
+          )}
           {!hasKey && (
             <Card style={{ borderColor:"rgba(251,191,36,0.35)" }}>
               <div style={{ fontSize:"13px", color:C.accent3, marginBottom:"6px" }}>🔑 Active le Conseiller IA</div>
@@ -1924,7 +2024,7 @@ ${taxes}
 
     // ── RÉGLAGES ───────────────────────────────────────────────────────────
 
-    function SettingsModal({ store, onClose, onEditProfile, onReset, onImport, onKeyChange }) {
+    function SettingsModal({ store, onClose, onEditProfile, onReset, onImport, onKeyChange, onRevokeConsent }) {
       const fileRef = useRef(null);
       const importFile = (e) => {
         const f = e.target.files?.[0]; if (!f) return;
@@ -1942,7 +2042,14 @@ ${taxes}
             <Btn onClick={onClose} style={{ padding:"6px 10px" }}>✕</Btn>
           </div>
           <SLabel>Conseiller IA</SLabel>
-          <div style={{ marginBottom:"20px" }}><ApiKeyForm onSaved={onKeyChange} /></div>
+          <div style={{ marginBottom:"20px" }}>
+            {APP_CONFIG.aiProxyUrl
+              ? <div style={{ fontSize:"12.5px", color:C.textDim, lineHeight:"1.7" }}>✓ Le Conseiller est inclus dans l'application, aucune clé n'est nécessaire.</div>
+              : <ApiKeyForm onSaved={onKeyChange} />}
+            {store.aiConsent && <div style={{ marginTop:"10px", fontSize:"12px", color:C.textDim }}>
+              Partage avec l'IA accepté le {fmtDate(store.aiConsent)}. <button onClick={onRevokeConsent} style={{ background:"transparent", border:"none", color:C.accent, cursor:"pointer", textDecoration:"underline", fontSize:"12px" }}>Retirer mon accord</button>
+            </div>}
+          </div>
           <SLabel>Mon profil</SLabel>
           <Btn onClick={onEditProfile} style={{ width:"100%", marginBottom:"20px" }}>✏️ Modifier mon profil (la checklist s'adapte)</Btn>
           <SLabel>Mes données (stockées sur cet appareil uniquement)</SLabel>
@@ -1964,6 +2071,24 @@ ${taxes}
     const STORE_KEY = "capmicro_data";
     const EMPTY_STORE = { profile:null, steps:{}, entreprise:null, clients:[], docs:[], recettes:[], achats:[], actions:[], messages:[], objectif:"" };
 
+    let nativeSaveTimer = null;
+    function persistNative(json) {
+      const Preferences = nativePlugin("Preferences");
+      if (!Preferences) return;
+      clearTimeout(nativeSaveTimer);
+      nativeSaveTimer = setTimeout(() => Preferences.set({ key:STORE_KEY, value:json }).catch(() => {}), 400);
+    }
+
+    // Au démarrage sur mobile : restaure les données si le système a vidé le stockage de la WebView
+    async function restoreNative() {
+      const Preferences = nativePlugin("Preferences");
+      if (!Preferences) return;
+      try {
+        const { value } = await Preferences.get({ key:STORE_KEY });
+        if (value && !localStorage.getItem(STORE_KEY)) localStorage.setItem(STORE_KEY, value);
+      } catch(e) {}
+    }
+
     function loadStore() {
       try { const v = localStorage.getItem(STORE_KEY); return v ? { ...EMPTY_STORE, ...JSON.parse(v) } : EMPTY_STORE; } catch(e) { return EMPTY_STORE; }
     }
@@ -1981,12 +2106,14 @@ ${taxes}
       const [editingProfile, setEditingProfile] = useState(false);
       const [settings, setSettings] = useState(false);
       const [pending, setPending] = useState(null);
-      const [hasKey, setHasKey] = useState(!!localStorage.getItem(KEY_STORAGE));
+      const [hasKey, setHasKey] = useState(aiAvailable);
 
       const patch = useCallback((changes) => {
         setStore(prev => {
           const next = { ...prev, ...changes };
-          try { localStorage.setItem(STORE_KEY, JSON.stringify(next)); } catch(e) { alert("Stockage plein : exporte une sauvegarde depuis les réglages."); }
+          const json = JSON.stringify(next);
+          try { localStorage.setItem(STORE_KEY, json); } catch(e) { alert("Stockage plein : exporte une sauvegarde depuis les réglages."); }
+          persistNative(json);
           return next;
         });
       }, []);
@@ -2012,6 +2139,7 @@ ${taxes}
       const reset = () => {
         if (!confirm("Effacer toutes tes données Cap Micro sur cet appareil (profil, factures, livre des recettes, conversation) ? Pense à faire une sauvegarde avant.")) return;
         localStorage.removeItem(STORE_KEY);
+        nativePlugin("Preferences")?.remove({ key:STORE_KEY }).catch(() => {});
         setStore(EMPTY_STORE); setSettings(false); setTab("creation");
       };
 
@@ -2041,12 +2169,13 @@ ${taxes}
               {tab === "creation" && <CreationTab {...common} />}
               {tab === "factures" && <FacturesTab {...common} />}
               {tab === "suivi"    && <SuiviTab {...common} />}
-              {tab === "conseil"  && <ConseillerTab {...common} pending={pending} clearPending={() => setPending(null)} onNeedKey={() => setSettings(true)} hasKey={hasKey || !!localStorage.getItem(KEY_STORAGE)} />}
+              {tab === "conseil"  && <ConseillerTab {...common} pending={pending} clearPending={() => setPending(null)} onNeedKey={() => setSettings(true)} hasKey={hasKey || aiAvailable()} />}
             </div>
 
             <div style={{ textAlign:"center", marginTop:"26px", fontSize:"10.5px", color:C.textFaint, lineHeight:"1.7" }}>
               Règles à jour de {REGLES.majLe} · outil d'aide, ne remplace pas un professionnel du chiffre ou du droit.<br/>
-              <a href="orientation.html" style={{ color:C.textFaint }}>🧭 Boussole</a> · <a href="index.html" style={{ color:C.textFaint }}>✨ Glow Up</a>
+              <a href="https://rasarivo.github.io/Glowup/capmicro/confidentialite.html" target="_blank" rel="noopener" style={{ color:C.textFaint }}>Confidentialité</a>
+              {!IS_NATIVE && <span className="web-only"> · <a href="orientation.html" style={{ color:C.textFaint }}>🧭 Boussole</a> · <a href="index.html" style={{ color:C.textFaint }}>✨ Glow Up</a></span>}
             </div>
           </div>
 
@@ -2062,13 +2191,13 @@ ${taxes}
           </nav>
 
           {settings && <SettingsModal store={store} onClose={() => setSettings(false)} onEditProfile={() => { setSettings(false); setEditingProfile(true); }} onReset={reset}
-            onImport={(data) => patch({ ...EMPTY_STORE, ...data })} onKeyChange={() => setHasKey(!!localStorage.getItem(KEY_STORAGE))} />}
+            onImport={(data) => patch({ ...EMPTY_STORE, ...data })} onKeyChange={() => setHasKey(aiAvailable())} onRevokeConsent={() => patch({ aiConsent:null })} />}
           <InstallBanner />
         </div>
       );
     }
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    restoreNative().finally(() => ReactDOM.createRoot(document.getElementById("root")).render(<App />));
   </script>
 </body>
 </html>

@@ -1,0 +1,73 @@
+# Agent de promotion de Cap Micro : un kit de posts chaque matin, publication automatique
+# sur les réseaux configurés, et bilan chaque lundi qui ajuste la stratégie.
+name: Agent de promotion
+
+on:
+  schedule:
+    - cron: "30 6 * * *"   # tous les jours vers 8 h 30 (heure de Paris en été)
+    - cron: "0 5 * * 1"    # bilan le lundi
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "quotidien ou bilan"
+        type: choice
+        options: [quotidien, bilan]
+        default: quotidien
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promo-agent
+  cancel-in-progress: false
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: marketing
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+      META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
+      META_IG_USER_ID: ${{ secrets.META_IG_USER_ID }}
+      LINKEDIN_ORG_ID: ${{ secrets.LINKEDIN_ORG_ID }}
+      LINKEDIN_TOKEN: ${{ secrets.LINKEDIN_TOKEN }}
+      LINKEDIN_VERSION: ${{ vars.LINKEDIN_VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: marketing/package-lock.json }
+      - run: npm ci
+      - name: Vérification
+        id: check
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::warning::Secret ANTHROPIC_API_KEY absent : l'agent ne tourne pas (voir marketing/README.md)."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+          git config user.name "cap-micro-agent"
+          git config user.email "cap-micro-agent@users.noreply.github.com"
+
+      - name: Bilan hebdomadaire
+        if: steps.check.outputs.ok == 'true' && (github.event.schedule == '0 5 * * 1' || inputs.mode == 'bilan')
+        run: |
+          node agent/run.mjs --mode=bilan
+          git add -A . && git commit -m "Agent : bilan hebdomadaire" && git push || echo "Rien à publier"
+
+      - name: Kit du jour
+        if: steps.check.outputs.ok == 'true' && github.event.schedule != '0 5 * * 1' && inputs.mode != 'bilan'
+        run: |
+          npx playwright install --with-deps chromium
+          node agent/run.mjs --mode=generer
+          git add -A . && git commit -m "Agent : kit du $(date +%F)" && git push || echo "Rien à publier"
+
+      - name: Publication
+        if: steps.check.outputs.ok == 'true' && github.event.schedule != '0 5 * * 1' && inputs.mode != 'bilan'
+        run: |
+          sleep 60   # laisse le temps aux visuels poussés d'être servis par GitHub
+          node agent/run.mjs --mode=publier
+          git add -A . && git commit -m "Agent : publication du $(date +%F)" && git push || echo "Rien à publier"
