@@ -1,0 +1,2074 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <title>Cap Micro 🚀</title>
+  <meta name="description" content="Le copilote de l'auto-entrepreneur — création, démarches, facturation électronique, suivi et développement">
+
+  <!-- PWA iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Cap Micro 🚀">
+
+  <!-- PWA Android -->
+  <meta name="theme-color" content="#0b1220">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <!-- Manifest inline via data URI (Android) -->
+  <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Cap%20Micro%20-%20Copilote%20auto-entrepreneur%22%2C%22short_name%22%3A%22Cap%20Micro%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230b1220%22%2C%22theme_color%22%3A%22%230b1220%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%2520viewBox%3D%270%200%20100%20100%27%253E%253Crect%2520width%3D%27100%27%2520height%3D%27100%27%2520rx%3D%2722%27%2520fill%3D%27%230b1220%27%2F%253E%253Ctext%2520y%3D%27.9em%27%2520font-size%3D%2770%27%2520x%3D%2715%27%253E%25F0%259F%259A%2580%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22192x192%22%7D%5D%7D">
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #0b1220; -webkit-tap-highlight-color: transparent; }
+    #root { min-height: 100%; }
+    input, button, textarea, select { -webkit-appearance: none; font-family: 'Georgia', serif; }
+    select option { color: #111; }
+    ::-webkit-scrollbar { display: none; }
+    * { scrollbar-width: none; }
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes pulse { 0%,100%{opacity:0.6} 50%{opacity:1} }
+    @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+    #print-area { display: none; }
+    @media print {
+      body > *:not(#print-area) { display: none !important; }
+      #print-area { display: block !important; }
+      html, body { background: #fff !important; height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useEffect, useCallback, useMemo } = React;
+
+    // ── PALETTE ────────────────────────────────────────────────────────────
+    const C = {
+      bg: "linear-gradient(160deg,#0b1220,#101a2e,#0c1526)",
+      card: "rgba(255,255,255,0.045)",
+      cardBorder: "rgba(255,255,255,0.1)",
+      text: "#edf1f7",
+      textDim: "rgba(237,241,247,0.6)",
+      textFaint: "rgba(237,241,247,0.34)",
+      accent: "#34d399",
+      accent2: "#818cf8",
+      accent3: "#fbbf24",
+      danger: "#fb7185",
+      grad: "linear-gradient(135deg,#fbbf24,#34d399,#818cf8)",
+    };
+
+    // ── RÈGLES 2026 (à revoir chaque 1er janvier) ─────────────────────────
+    // Sources : autoentrepreneur.urssaf.fr, impots.gouv.fr, service-public.fr.
+    // Tous les chiffres sont centralisés ici pour être mis à jour en un seul endroit.
+
+    const REGLES = {
+      annee: 2026,
+      majLe: "septembre 2026",
+      acre: { avantJuillet2026: 0.5, depuisJuillet2026: 0.75, bascule: "2026-07-01" }, // part du taux normal payée
+      compteDedieSeuil: 10000,
+      penaliteMention: 15,
+      facturationElec: {
+        reception: "2026-09-01",
+        emission: "2027-09-01",
+      },
+    };
+
+    const ACTIVITES = [
+      { id:"vente",   emoji:"🛍️", label:"Vente de marchandises", sub:"Commerce, e-commerce, restauration, hébergement", nature:"BIC", chambre:"CCI",
+        taux:12.3, cfp:0.1, vl:1.0, abattement:71, plafond:203100, tva:85000, tvaMaj:93500 },
+      { id:"services_com", emoji:"🧰", label:"Prestations de services commerciales", sub:"Conciergerie, location meublée, agent commercial…", nature:"BIC", chambre:"CCI",
+        taux:21.2, cfp:0.1, vl:1.7, abattement:50, plafond:83600, tva:37500, tvaMaj:41250 },
+      { id:"artisan", emoji:"🔨", label:"Activité artisanale", sub:"Bâtiment, coiffure, esthétique, réparation, alimentation…", nature:"BIC", chambre:"CMA",
+        taux:21.2, cfp:0.3, vl:1.7, abattement:50, plafond:83600, tva:37500, tvaMaj:41250 },
+      { id:"liberal", emoji:"💻", label:"Profession libérale non réglementée", sub:"Conseil, formation, dev web, design, coaching…", nature:"BNC", chambre:"—",
+        taux:25.6, cfp:0.2, vl:2.2, abattement:34, plafond:83600, tva:37500, tvaMaj:41250 },
+      { id:"cipav", emoji:"📐", label:"Libéral relevant de la Cipav", sub:"Architecte, géomètre, ostéopathe, psychologue…", nature:"BNC", chambre:"—",
+        taux:23.2, cfp:0.2, vl:2.2, abattement:34, plafond:83600, tva:37500, tvaMaj:41250 },
+    ];
+
+    const SITUATIONS = [
+      { id:"salarie",   label:"Salarié(e) du privé" },
+      { id:"fonctionnaire", label:"Agent public / fonctionnaire" },
+      { id:"chomage",   label:"Demandeur d'emploi (France Travail)" },
+      { id:"rsa",       label:"Bénéficiaire du RSA" },
+      { id:"etudiant",  label:"Étudiant(e)" },
+      { id:"retraite",  label:"Retraité(e)" },
+      { id:"autre",     label:"Sans activité / autre" },
+    ];
+
+    const CLIENTS = [
+      { id:"b2c",  label:"Des particuliers" },
+      { id:"b2b",  label:"Des professionnels (entreprises, associations, administrations)" },
+      { id:"mixte",label:"Les deux" },
+    ];
+
+    const LIEUX = [
+      { id:"domicile",  label:"À mon domicile" },
+      { id:"local",     label:"Dans un local (boutique, atelier, bureau)" },
+      { id:"itinerant", label:"Itinérant / chez mes clients / sur les marchés" },
+    ];
+
+    const TRISTATE = ["oui", "non", "je ne sais pas"];
+
+    // ── HELPERS ────────────────────────────────────────────────────────────
+
+    const EUR = new Intl.NumberFormat("fr-FR", { style:"currency", currency:"EUR" });
+    const eur = (n) => EUR.format(Number(n) || 0);
+    const todayISO = () => new Date().toISOString().slice(0,10);
+    const fmtDate = (iso) => iso ? new Date(iso + "T12:00:00").toLocaleDateString("fr-FR") : "—";
+    const addDays = (iso, d) => { const x = new Date(iso + "T12:00:00"); x.setDate(x.getDate() + d); return x.toISOString().slice(0,10); };
+    const daysBetween = (a, b) => Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000);
+    const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+    const activiteOf = (p) => ACTIVITES.find(a => a.id === p?.activite) || ACTIVITES[1];
+    const isB2C = (p) => p?.clients === "b2c" || p?.clients === "mixte";
+    const isB2B = (p) => p?.clients === "b2b" || p?.clients === "mixte";
+    const lastDayOfMonth = (y, m) => new Date(y, m + 1, 0).getDate(); // m : 0-11
+    const iso = (y, m, d) => `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    const escXml = (s) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+    function downloadFile(name, content, type = "text/plain;charset=utf-8") {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // ── CHECKLIST DE CRÉATION (règles déterministes : rien n'est oublié) ──
+
+    const PHASES = [
+      { id:"preparer",  label:"Préparer",                 emoji:"🧭" },
+      { id:"declarer",  label:"Déclarer l'entreprise",    emoji:"📝" },
+      { id:"apres",     label:"Après l'immatriculation",  emoji:"🏁" },
+      { id:"efacture",  label:"Facturation électronique", emoji:"⚡" },
+      { id:"quotidien", label:"Au quotidien",             emoji:"🔁" },
+    ];
+
+    function buildChecklist(p) {
+      const a = activiteOf(p);
+      const S = [];
+      const add = (s) => S.push({ obligatoire:true, comment:[], ...s });
+
+      // 1. PRÉPARER
+      add({ id:"p_eligibilite", phase:"preparer", titre:"Vérifier que ton activité est compatible avec la micro-entreprise",
+        pourquoi:"Certaines activités sont exclues du régime (marchands de biens, lotisseurs, agents d'affaires immobilières, location d'immeubles nus à usage professionnel, activités agricoles relevant de la MSA, officiers publics…).",
+        comment:["Décris ton activité précisément (c'est elle qui détermine la nature BIC/BNC, la caisse et le code APE)","En cas de doute, pose la question au Conseiller ou à ta CCI / CMA"],
+        lien:{ label:"Service-public.fr — Micro-entrepreneur", url:"https://entreprendre.service-public.fr/vosdroits/F23961" } });
+
+      if (p.situation === "salarie") add({ id:"p_salarie", phase:"preparer", titre:"Relire ton contrat de travail (exclusivité, non-concurrence, loyauté)",
+        pourquoi:"Une clause d'exclusivité peut interdire de créer une activité à côté (elle est inopposable pendant 1 an en cas de création d'entreprise, sauf pour les temps partiels). Tu dois toujours respecter l'obligation de loyauté envers ton employeur.",
+        comment:["Repère les clauses d'exclusivité et de non-concurrence","Ne démarche pas les clients de ton employeur","Travaille en dehors de tes heures de travail et sans le matériel de l'employeur"],
+        lien:{ label:"Cumul salarié / micro-entrepreneur", url:"https://entreprendre.service-public.fr/vosdroits/F23961" } });
+
+      if (p.situation === "fonctionnaire") add({ id:"p_fonctionnaire", phase:"preparer", titre:"Demander l'autorisation de cumul d'activités à ton employeur public",
+        pourquoi:"Un agent public ne peut exercer une activité privée lucrative qu'avec une autorisation préalable écrite (cumul d'activités) ; sans elle, tu t'exposes à des sanctions disciplinaires.",
+        comment:["Adresse une demande écrite à ton autorité hiérarchique AVANT de créer","Précise la nature, la durée et le volume horaire de l'activité","Attends la réponse écrite avant l'immatriculation"],
+        lien:{ label:"Cumul d'activités — fonction publique", url:"https://www.service-public.fr/particuliers/vosdroits/F20118" } });
+
+      if (p.situation === "chomage") add({ id:"p_chomage", phase:"preparer", titre:"Informer France Travail et choisir : maintien de l'ARE ou ARCE",
+        pourquoi:"Tu peux cumuler tes allocations avec tes revenus d'auto-entrepreneur (maintien de l'ARE) ou percevoir une partie de tes droits restants en capital (ARCE, versée en 2 fois). Le choix est structurant pour ta trésorerie.",
+        comment:["Déclare ta création à France Travail (espace personnel)","Simule les 2 options avec ton conseiller","L'ARCE nécessite d'avoir obtenu l'ACRE"],
+        lien:{ label:"France Travail — créer son entreprise", url:"https://www.francetravail.fr/candidat/vos-aides-financieres/vous-creez-ou-reprenez-une-entre.html" } });
+
+      if (p.situation === "rsa") add({ id:"p_rsa", phase:"preparer", titre:"Prévenir la CAF / MSA de ta création d'activité",
+        pourquoi:"Ton chiffre d'affaires sera pris en compte (après abattement) dans le calcul du RSA et de la prime d'activité. Le bénéfice du RSA ouvre en général droit à l'ACRE.",
+        comment:["Déclare la création dans ton espace CAF","Déclare ton CA chaque trimestre dans la déclaration trimestrielle de ressources"],
+        lien:{ label:"CAF — travailleurs indépendants", url:"https://www.caf.fr" } });
+
+      if (p.situation === "etudiant") add({ id:"p_etudiant", phase:"preparer", obligatoire:false, titre:"Demander le statut national d'étudiant-entrepreneur (SNEE)",
+        pourquoi:"Il te permet d'aménager tes études, de remplacer un stage par ton projet et d'être accompagné gratuitement par un Pépite. Vérifie aussi l'impact sur ta bourse et tes APL.",
+        comment:["Candidate auprès du Pépite de ton établissement","Vérifie l'impact sur ta bourse (CROUS) et tes aides au logement"],
+        lien:{ label:"Pépite France", url:"https://www.pepite-france.fr" } });
+
+      if (p.situation === "retraite") add({ id:"p_retraite", phase:"preparer", titre:"Vérifier les règles du cumul emploi-retraite",
+        pourquoi:"Selon que ton cumul est « intégral » ou « plafonné », tes revenus d'auto-entrepreneur peuvent réduire ta pension. Les cotisations versées peuvent ouvrir de nouveaux droits sous conditions.",
+        comment:["Contacte ta caisse de retraite avant de démarrer","Informe-la de ta reprise d'activité dans le mois qui suit"],
+        lien:{ label:"Cumul emploi-retraite", url:"https://www.service-public.fr/particuliers/vosdroits/F16337" } });
+
+      if (p.activite === "artisan" && p.reglementee) add({ id:"p_qualif", phase:"preparer", titre:"Réunir la preuve de ta qualification professionnelle",
+        pourquoi:"Les activités artisanales réglementées (bâtiment, coiffure, esthétique, boulangerie, réparation auto…) exigent un diplôme (CAP/BEP minimum) ou 3 ans d'expérience professionnelle. Elle est vérifiée lors de l'immatriculation.",
+        comment:["Diplôme (CAP, BEP, BP…) ou justificatifs de 3 ans d'expérience (fiches de paie, attestations)","À joindre à la déclaration sur le guichet unique"],
+        lien:{ label:"Qualification artisanale", url:"https://entreprendre.service-public.fr/vosdroits/F24500" } });
+
+      if (p.activite === "cipav") add({ id:"p_ordre", phase:"preparer", titre:"Vérifier les conditions d'exercice de ta profession réglementée",
+        pourquoi:"Certaines professions libérales réglementées exigent un diplôme, un titre protégé ou une inscription à un ordre ou un registre (ex : architectes, psychologues — numéro ADELI/RPPS, ostéopathes).",
+        comment:["Vérifie le diplôme/titre requis","Effectue l'inscription à l'ordre ou au registre professionnel si nécessaire"],
+        lien:{ label:"Professions libérales réglementées", url:"https://entreprendre.service-public.fr" } });
+
+      if (p.lieu === "domicile") add({ id:"p_domicile", phase:"preparer", titre:"Vérifier que tu peux domicilier l'entreprise chez toi",
+        pourquoi:"Tu peux toujours déclarer ton adresse personnelle comme adresse de l'entreprise, mais recevoir des clients ou stocker de la marchandise peut être interdit par ton bail ou le règlement de copropriété.",
+        comment:["Relis ton bail / règlement de copropriété","Si tu es locataire, informe ton bailleur par écrit","Alternative : société de domiciliation"],
+        lien:{ label:"Domiciliation de l'entreprise", url:"https://entreprendre.service-public.fr/vosdroits/F2160" } });
+
+      if (p.lieu === "local") add({ id:"p_local", phase:"preparer", titre:"Sécuriser ton local (bail, normes, accessibilité)",
+        pourquoi:"Un local recevant du public doit respecter les normes ERP (sécurité incendie, accessibilité). Le type de bail (commercial, professionnel, précaire) conditionne tes droits.",
+        comment:["Fais relire le bail avant de signer","Vérifie l'autorisation d'usage du local (PLU, copropriété)","Prévois l'assurance multirisque du local"],
+        lien:{ label:"Choisir son local", url:"https://entreprendre.service-public.fr" } });
+
+      if (p.lieu === "itinerant" && (p.activite === "vente" || p.activite === "artisan")) add({ id:"p_ambulant", phase:"preparer", titre:"Demander la carte de commerçant ambulant",
+        pourquoi:"Obligatoire pour vendre ou exercer une activité artisanale sur les marchés, foires ou la voie publique en dehors de la commune de ton domicile.",
+        comment:["Demande en ligne après l'immatriculation (CCI ou CMA)","Coût : environ 30 €, valable 4 ans","Demande aussi les autorisations d'emplacement aux mairies"],
+        lien:{ label:"Carte de commerçant ambulant", url:"https://entreprendre.service-public.fr/vosdroits/F22427" } });
+
+      add({ id:"p_nom", phase:"preparer", obligatoire:false, titre:"Vérifier que ton nom commercial est libre",
+        pourquoi:"Utiliser un nom déjà déposé comme marque peut te valoir une action en contrefaçon et t'obliger à tout changer.",
+        comment:["Recherche sur la base marques de l'INPI","Vérifie la disponibilité du nom de domaine et des réseaux sociaux"],
+        lien:{ label:"Base marques INPI", url:"https://data.inpi.fr" } });
+
+      add({ id:"p_simulation", phase:"preparer", obligatoire:false, titre:"Simuler tes revenus, cotisations et impôts",
+        pourquoi:`En ${a.label.toLowerCase()}, tu paieras environ ${a.taux} % de cotisations sociales sur ton chiffre d'affaires encaissé (+ ${a.cfp} % de formation professionnelle), sans pouvoir déduire tes frais. Il faut fixer tes prix en conséquence.`,
+        comment:["Utilise le simulateur officiel de l'Urssaf","Ou l'onglet Suivi de Cap Micro une fois ton activité lancée"],
+        lien:{ label:"Simulateur mon-entreprise.urssaf.fr", url:"https://mon-entreprise.urssaf.fr/simulateurs/auto-entrepreneur" } });
+
+      add({ id:"p_vl", phase:"preparer", obligatoire:false, titre:"Décider de l'option pour le versement libératoire de l'impôt",
+        pourquoi:`Tu paies l'impôt sur le revenu en même temps que tes cotisations (${a.vl} % du CA). Intéressant si ton foyer est peu ou pas imposé… mais pas toujours : il faut simuler. Condition : revenu fiscal de référence de l'avant-dernière année ≤ plafond de la 2e tranche du barème par part.`,
+        comment:["Regarde ton revenu fiscal de référence sur ton avis d'impôt N-2","Compare avec le régime classique (abattement de " + a.abattement + " %)","Option à choisir à la création, ou avant le 30 septembre pour l'année suivante"],
+        lien:{ label:"Versement libératoire", url:"https://www.autoentrepreneur.urssaf.fr/portail/accueil/sinformer-sur-le-statut/lessentiel-du-statut.html" } });
+
+      if (p.acre !== "non") add({ id:"p_acre_elig", phase:"preparer", obligatoire:false, titre:"Vérifier ton éligibilité à l'ACRE",
+        pourquoi:"L'ACRE réduit tes cotisations sociales jusqu'à la fin du 3e trimestre civil qui suit ta création. Attention : depuis le 1er juillet 2026, tu paies 75 % du taux normal (exonération de 25 %, contre 50 % avant).",
+        comment:["Publics éligibles notamment : demandeurs d'emploi indemnisés, bénéficiaires du RSA ou de l'ASS, 18-25 ans (et -30 ans handicapés ou non indemnisés), créateurs en QPV…","Elle n'est pas automatique : il faut la demander"],
+        lien:{ label:"ACRE — Urssaf", url:"https://www.autoentrepreneur.urssaf.fr/portail/accueil/creer/lacre.html" } });
+
+      // 2. DÉCLARER
+      add({ id:"d_pieces", phase:"declarer", titre:"Préparer les pièces justificatives",
+        pourquoi:"Un dossier incomplet est rejeté et retarde ton immatriculation.",
+        comment:["Pièce d'identité en cours de validité (scan recto-verso)","Justificatif de domicile de moins de 3 mois","Déclaration sur l'honneur de non-condamnation (signée en ligne)", ...(p.activite==="artisan" && p.reglementee ? ["Justificatif de qualification professionnelle"] : []), "Si tu es marié(e) sous un régime de communauté : attestation d'information du conjoint sur les conséquences des dettes sur les biens communs"],
+        lien:{ label:"Pièces à fournir", url:"https://entreprendre.service-public.fr/vosdroits/F37404" } });
+
+      add({ id:"d_guichet", phase:"declarer", titre:"Déclarer ton activité sur le guichet unique (INPI)",
+        pourquoi:"Depuis 2023, TOUTE création passe par le guichet unique des formalités des entreprises. C'est gratuit (méfie-toi des sites payants qui imitent le service officiel). L'immatriculation au Registre national des entreprises (RNE) est automatique.",
+        comment:["Crée ton compte sur formalites.entreprises.gouv.fr","Choisis « Entrepreneur individuel » puis « micro-entrepreneur »","Renseigne : activité principale, date de début, adresse, options fiscales (versement libératoire), périodicité de déclaration (mensuelle ou trimestrielle), demande d'ACRE","Astuce : utilise le bouton « Préparer mon dossier » ci-dessus pour avoir toutes tes réponses prêtes"],
+        lien:{ label:"formalites.entreprises.gouv.fr", url:"https://formalites.entreprises.gouv.fr" } });
+
+      if (p.acre === "oui" || p.acre === "je ne sais pas") add({ id:"d_acre", phase:"declarer", titre:"Demander l'ACRE (si tu es éligible)",
+        pourquoi:"L'ACRE doit être demandée explicitement : lors de la déclaration sur le guichet unique, ou au plus tard dans les 60 jours suivant la création via le formulaire de l'Urssaf (délai à confirmer sur urssaf.fr).",
+        comment:["Coche la demande d'ACRE dans le formulaire du guichet unique","Sinon : formulaire de demande d'ACRE sur autoentrepreneur.urssaf.fr + justificatifs","Conserve l'accusé de réception"],
+        lien:{ label:"Demander l'ACRE", url:"https://www.autoentrepreneur.urssaf.fr/portail/accueil/creer/lacre.html" } });
+
+      // 3. APRÈS L'IMMATRICULATION
+      add({ id:"a_siret", phase:"apres", titre:"Récupérer ton SIRET, ton code APE et ton attestation d'immatriculation",
+        pourquoi:"L'INSEE t'attribue un SIREN/SIRET et un code APE (1 à 4 semaines). Ton SIRET doit figurer sur tous tes devis et factures. Vérifie que le code APE correspond bien à ton activité.",
+        comment:["Consulte ton avis de situation SIRENE sur avis-situation-sirene.insee.fr","Télécharge l'attestation d'immatriculation au RNE sur data.inpi.fr","Code APE erroné ? Demande sa modification à l'INSEE"],
+        lien:{ label:"Avis de situation SIRENE", url:"https://avis-situation-sirene.insee.fr" } });
+
+      add({ id:"a_urssaf", phase:"apres", titre:"Activer ton espace sur autoentrepreneur.urssaf.fr",
+        pourquoi:"C'est là que tu déclareras ton chiffre d'affaires et paieras tes cotisations. Le SIRET est nécessaire pour créer ton compte.",
+        comment:["Crée ton compte avec ton SIRET","Enregistre ton mandat de prélèvement SEPA","Vérifie la périodicité (mensuelle/trimestrielle) et l'option versement libératoire"],
+        lien:{ label:"autoentrepreneur.urssaf.fr", url:"https://www.autoentrepreneur.urssaf.fr" } });
+
+      add({ id:"a_impots", phase:"apres", titre:"Créer ton espace professionnel sur impots.gouv.fr",
+        pourquoi:"Indispensable pour recevoir et payer ta CFE, et pour gérer la TVA si tu y deviens redevable.",
+        comment:["Crée l'espace avec ton SIREN","Active-le avec le code reçu par courrier","Adhère au prélèvement pour la CFE"],
+        lien:{ label:"Espace professionnel", url:"https://www.impots.gouv.fr/professionnel" } });
+
+      add({ id:"a_cfe", phase:"apres", titre:"Déposer la déclaration initiale de CFE (formulaire 1447-C-SD)",
+        pourquoi:"La cotisation foncière des entreprises est due même sans local. Tu en es exonéré l'année de création, puis tu bénéficies d'une réduction de 50 % l'année suivante — à condition d'avoir fait la déclaration initiale avant le 31 décembre de l'année de création.",
+        comment:["Formulaire 1447-C-SD sur ton espace professionnel ou auprès de ton SIE","Avant le 31 décembre de l'année de création","Exonération possible si ton CA annuel ≤ 5 000 €"],
+        lien:{ label:"CFE — impots.gouv.fr", url:"https://www.impots.gouv.fr/professionnel/cotisation-fonciere-des-entreprises-cfe" } });
+
+      add({ id:"a_banque", phase:"apres", obligatoire:false, titre:"Ouvrir un compte bancaire dédié",
+        pourquoi:`Obligatoire dès que ton CA dépasse ${eur(REGLES.compteDedieSeuil)} deux années civiles de suite (un compte personnel séparé suffit). Fortement recommandé dès le départ : ta comptabilité et ton suivi deviennent automatiques.`,
+        comment:["Un compte courant séparé à ton nom suffit (pas forcément un « compte pro »)","Fais-y transiter toutes tes recettes et dépenses professionnelles"],
+        lien:{ label:"Compte bancaire micro-entrepreneur", url:"https://entreprendre.service-public.fr/vosdroits/F23961" } });
+
+      const assuranceObligatoire = p.batiment || p.activite === "cipav";
+      add({ id:"a_assurance", phase:"apres", obligatoire:assuranceObligatoire, titre: p.batiment ? "Souscrire l'assurance décennale (et une RC Pro)" : "Souscrire une responsabilité civile professionnelle",
+        pourquoi: p.batiment ? "L'assurance décennale est OBLIGATOIRE pour les travaux de construction, AVANT l'ouverture du chantier. Tes devis et factures doivent mentionner l'assureur, la couverture géographique et les coordonnées de l'assurance." :
+          assuranceObligatoire ? "La RC Pro est obligatoire pour de nombreuses professions libérales réglementées et les activités de santé." :
+          "Ta responsabilité personnelle est engagée en cas de dommage causé à un client. Une RC Pro coûte généralement quelques dizaines d'euros par mois et rassure tes clients.",
+        comment:["Compare au moins 3 devis","Si l'assurance est obligatoire : indique-la sur tes devis et factures (onglet Factures > Mon entreprise)"],
+        lien:{ label:"Assurances de l'entreprise", url:"https://entreprendre.service-public.fr/vosdroits/F31015" } });
+
+      add({ id:"a_livre", phase:"apres", titre: p.activite === "vente" ? "Tenir le livre des recettes et le registre des achats" : "Tenir le livre des recettes",
+        pourquoi:"C'est la seule comptabilité obligatoire du micro-entrepreneur : chaque encaissement doit y être noté (date, client, nature, montant, mode de paiement)." + (p.activite === "vente" ? " En vente de marchandises, tu dois aussi tenir un registre des achats." : ""),
+        comment:["Cap Micro le tient pour toi : onglet Suivi (alimenté automatiquement par tes factures payées)","Conserve toutes les pièces justificatives (factures, tickets) pendant 10 ans"],
+        lien:{ label:"Obligations comptables", url:"https://entreprendre.service-public.fr/vosdroits/F23961" } });
+
+      if (isB2C(p)) add({ id:"a_mediateur", phase:"apres", titre:"Adhérer à un médiateur de la consommation",
+        pourquoi:"Obligatoire dès que tu vends à des particuliers : tu dois proposer gratuitement un dispositif de médiation et en afficher les coordonnées (site, CGV, devis/factures). Amende jusqu'à 3 000 € sinon.",
+        comment:["Choisis un médiateur référencé par la CECMC","Coût : quelques dizaines d'euros par an en général","Ajoute ses coordonnées dans tes CGV et sur ton site"],
+        lien:{ label:"Liste des médiateurs agréés", url:"https://www.economie.gouv.fr/mediation-conso" } });
+
+      add({ id:"a_cgv", phase: "apres", obligatoire: isB2C(p) || p.enLigne, titre: p.enLigne ? "Rédiger CGV, mentions légales et politique de confidentialité du site" : "Rédiger tes conditions générales de vente (CGV)",
+        pourquoi: p.enLigne ? "Tout site professionnel doit afficher des mentions légales. La vente en ligne impose des CGV complètes (droit de rétractation de 14 jours, garanties légales, médiateur) et une politique RGPD." :
+          "Obligatoires à communiquer à tout professionnel qui les demande, et à fournir aux particuliers avant la vente. Elles te protègent (conditions de paiement, pénalités, annulation).",
+        comment:["Demande au Conseiller de rédiger une première version adaptée à ton activité","Fais relire les points sensibles par un professionnel du droit"],
+        lien:{ label:"CGV — obligations", url:"https://entreprendre.service-public.fr/vosdroits/F22567" } });
+
+      if (p.ue) add({ id:"a_tva_intra", phase:"apres", titre:"Demander un numéro de TVA intracommunautaire",
+        pourquoi:"Même en franchise de TVA, il est obligatoire si tu achètes des services à des entreprises européennes (logiciels, publicité en ligne…) ou si tu factures des clients professionnels dans l'UE.",
+        comment:["Demande-le à ton service des impôts des entreprises (SIE) via la messagerie de ton espace pro","Il peut faire basculer certaines opérations dans le champ de la TVA : demande au Conseiller"],
+        lien:{ label:"Numéro de TVA intracommunautaire", url:"https://entreprendre.service-public.fr/vosdroits/F23570" } });
+
+      add({ id:"a_protection", phase:"apres", obligatoire:false, titre:"Compléter ta protection sociale (prévoyance, mutuelle)",
+        pourquoi:"Tes indemnités journalières et ta retraite sont calculées sur ton chiffre d'affaires, souvent faibles au démarrage. Une prévoyance couvre l'arrêt de travail et l'invalidité.",
+        comment:["Vérifie tes droits aux indemnités journalières (12 mois d'affiliation requis)","Compare des contrats de prévoyance et de mutuelle"],
+        lien:{ label:"Protection sociale de l'indépendant", url:"https://www.secu-independants.fr" } });
+
+      // 4. FACTURATION ÉLECTRONIQUE
+      add({ id:"f_pa", phase:"efacture", titre:"Choisir une plateforme agréée (PA) pour RECEVOIR tes factures",
+        pourquoi:"Depuis le 1er septembre 2026, toute entreprise assujettie à la TVA — y compris les micro-entrepreneurs en franchise — doit pouvoir recevoir des factures électroniques. Le portail public de l'État ne propose pas d'outil de facturation : il faut passer par une plateforme agréée par la DGFiP (plusieurs offres gratuites ou à bas coût existent pour les micro-entreprises).",
+        comment:["Consulte la liste officielle des plateformes agréées sur impots.gouv.fr","Critères : prix, réception + émission, e-reporting, archivage, application mobile, export du livre des recettes","Tes fournisseurs t'enverront leurs factures via cette plateforme"],
+        lien:{ label:"Liste des plateformes agréées", url:"https://www.impots.gouv.fr/facturation-electronique-et-plateformes-agreees" } });
+
+      add({ id:"f_annuaire", phase:"efacture", titre:"Vérifier ton inscription dans l'annuaire de facturation",
+        pourquoi:"L'annuaire central indique à tes fournisseurs sur quelle plateforme t'envoyer tes factures. C'est ta plateforme agréée qui t'y inscrit.",
+        comment:["Après adhésion, demande confirmation à ta plateforme","Vérifie ton adresse de facturation électronique (SIREN)"],
+        lien:{ label:"Réforme — impots.gouv.fr", url:"https://www.impots.gouv.fr/professionnel/je-passe-la-facturation-electronique" } });
+
+      add({ id:"f_mentions", phase:"efacture", titre:"Mettre à jour tes modèles de factures avec les nouvelles mentions",
+        pourquoi:`Nouvelles mentions obligatoires : SIREN du client professionnel, adresse de livraison si différente, nature de l'opération (biens, services ou mixte), option pour le paiement de la TVA d'après les débits le cas échéant. Chaque mention manquante : amende de ${REGLES.penaliteMention} €.`,
+        comment:["Les factures générées par Cap Micro intègrent déjà ces mentions","Récupère le SIREN de tous tes clients professionnels"],
+        lien:{ label:"Mentions obligatoires", url:"https://entreprendre.service-public.fr/vosdroits/F31808" } });
+
+      add({ id:"f_emission", phase:"efacture", titre:"Être prêt à ÉMETTRE des factures électroniques (1er septembre 2027)",
+        pourquoi:"À partir du 1er septembre 2027, tes factures aux professionnels établis en France (B2B) devront être émises en format structuré (Factur-X, UBL ou CII) via ta plateforme agréée. Un simple PDF envoyé par e-mail ne sera plus valable.",
+        comment:["Teste l'émission sur ta plateforme agréée dès maintenant","Cap Micro exporte tes factures au format XML CII (norme EN 16931) pour faciliter la transition"],
+        lien:{ label:"Calendrier de la réforme", url:"https://www.impots.gouv.fr/professionnel/je-passe-la-facturation-electronique" } });
+
+      if (isB2C(p) || p.ue) add({ id:"f_ereporting", phase:"efacture", titre:"Préparer l'e-reporting (1er septembre 2027)",
+        pourquoi:"Les ventes aux particuliers (B2C) et les opérations avec l'étranger ne passent pas par la facture électronique, mais leurs données (montants, dates, encaissements) devront être transmises à l'administration via ta plateforme agréée.",
+        comment:["Vérifie que ta plateforme propose l'e-reporting","Tiens ton livre des recettes à jour : il servira de base"],
+        lien:{ label:"E-reporting", url:"https://www.impots.gouv.fr/professionnel/je-passe-la-facturation-electronique" } });
+
+      // 5. AU QUOTIDIEN
+      add({ id:"q_declaration", phase:"quotidien", titre:`Déclarer ton chiffre d'affaires ${p.periodicite === "mensuelle" ? "chaque mois" : "chaque trimestre"} (même à 0 €)`,
+        pourquoi:"Oubli = pénalité forfaitaire. Et 0 € de CA déclaré pendant 24 mois (ou 8 trimestres) consécutifs entraîne la perte du statut. Ta première déclaration intervient après au moins 90 jours d'activité.",
+        comment:["Déclare le CA ENCAISSÉ (pas facturé) de la période","Échéances visibles dans l'onglet Suivi"],
+        lien:{ label:"Déclarer mon CA", url:"https://www.autoentrepreneur.urssaf.fr" } });
+
+      add({ id:"q_impot", phase:"quotidien", titre:"Reporter ton CA sur ta déclaration de revenus annuelle (mai-juin)",
+        pourquoi:"Même avec le versement libératoire, tu dois déclarer ton CA annuel sur la déclaration complémentaire 2042-C-PRO, avec ta déclaration de revenus.",
+        comment:["Rubrique « revenus des professions non salariées » — régime micro","Indique le CA brut : l'abattement est appliqué automatiquement"],
+        lien:{ label:"impots.gouv.fr", url:"https://www.impots.gouv.fr" } });
+
+      add({ id:"q_cfe", phase:"quotidien", titre:"Payer ta CFE au plus tard le 15 décembre (dès la 2e année)",
+        pourquoi:"L'avis de CFE n'est plus envoyé par courrier : il est déposé dans ton espace professionnel en novembre. Oubli = majoration de 5 %.",
+        comment:["Consulte ton espace pro début novembre","Opte pour le prélèvement mensuel ou à l'échéance"],
+        lien:{ label:"Payer la CFE", url:"https://www.impots.gouv.fr/professionnel" } });
+
+      add({ id:"q_seuils", phase:"quotidien", titre:"Surveiller tes seuils (TVA et plafond micro)",
+        pourquoi:`Franchise de TVA : ${eur(a.tva)} (seuil majoré ${eur(a.tvaMaj)}). Au-delà du seuil majoré, tu factures la TVA dès le 1er jour du dépassement. Plafond micro-entreprise : ${eur(a.plafond)} de CA annuel.`,
+        comment:["Les jauges de l'onglet Suivi t'alertent automatiquement","Anticipe : tarifs HT/TTC, logiciel, obligations déclaratives"],
+        lien:{ label:"Franchise en base de TVA", url:"https://entreprendre.service-public.fr/vosdroits/F21746" } });
+
+      return S;
+    }
+
+    // ── ÉCHÉANCES ──────────────────────────────────────────────────────────
+
+    function upcomingDeadlines(p, today = todayISO()) {
+      const out = [];
+      const t = new Date(today + "T12:00:00");
+      const y = t.getFullYear();
+      if (p.periodicite === "mensuelle") {
+        for (let k = 0; k < 3; k++) {
+          const m = t.getMonth() + k; // échéance à la fin du mois courant pour le mois précédent
+          const yy = y + Math.floor(m / 12), mm = ((m % 12) + 12) % 12;
+          const due = iso(yy, mm, lastDayOfMonth(yy, mm));
+          const periodLabel = new Date(yy, mm - 1, 1).toLocaleDateString("fr-FR", { month:"long", year:"numeric" });
+          if (due >= today) out.push({ date:due, label:`Déclaration Urssaf du CA de ${periodLabel}`, type:"urssaf" });
+        }
+      } else {
+        const qs = [[0,31,"4e trimestre", -1],[3,30,"1er trimestre",0],[6,31,"2e trimestre",0],[9,31,"3e trimestre",0]];
+        [y, y+1].forEach(yy => qs.forEach(([m, d, lbl, off]) => {
+          const due = iso(yy, m, d);
+          if (due >= today) out.push({ date:due, label:`Déclaration Urssaf du CA du ${lbl} ${yy + off}`, type:"urssaf" });
+        }));
+      }
+      const creaYear = p.dateDebut ? Number(p.dateDebut.slice(0,4)) : y;
+      if (creaYear <= y) {
+        const dec31 = iso(y, 11, 31);
+        if (creaYear === y && dec31 >= today) out.push({ date:dec31, label:"Date limite de la déclaration initiale de CFE (1447-C-SD)", type:"impots" });
+        const cfe = iso(y, 11, 15);
+        if (creaYear < y && cfe >= today) out.push({ date:cfe, label:"Paiement de la CFE", type:"impots" });
+        const cfeNext = iso(y+1, 11, 15);
+        out.push({ date:cfeNext, label:`Paiement de la CFE ${y+1}${creaYear === y ? " (réduite de 50 %)" : ""}`, type:"impots" });
+      }
+      const ir = iso(y, 4, 31);
+      out.push({ date: ir >= today ? ir : iso(y+1, 4, 31), label:"Déclaration de revenus (CA sur la 2042-C-PRO) — date exacte selon ton département", type:"impots" });
+      const vl = iso(y, 8, 30);
+      if (vl >= today) out.push({ date:vl, label:"Dernier jour pour opter ou renoncer au versement libératoire pour l'an prochain", type:"option" });
+      if (REGLES.facturationElec.emission >= today) out.push({ date:REGLES.facturationElec.emission, label:"Facturation électronique : obligation d'ÉMETTRE + e-reporting", type:"efacture" });
+      if (p.dateDebut && p.dateDebut > today) out.push({ date:p.dateDebut, label:"Début d'activité prévu", type:"option" });
+      return out.sort((a,b) => a.date.localeCompare(b.date)).slice(0, 7);
+    }
+
+    // ── CALCULS DE SUIVI ───────────────────────────────────────────────────
+
+    function tauxEffectif(p, dateISO) {
+      const a = activiteOf(p);
+      let social = a.taux;
+      if (p.acre === "oui" && p.dateDebut && dateISO >= p.dateDebut) {
+        // ACRE : jusqu'à la fin du 3e trimestre civil suivant la création
+        const d = new Date(p.dateDebut + "T12:00:00");
+        const qEnd = new Date(d.getFullYear(), Math.floor(d.getMonth()/3)*3 + 12, 0);
+        if (new Date(dateISO + "T12:00:00") <= qEnd) {
+          social = social * (dateISO < REGLES.acre.bascule ? REGLES.acre.avantJuillet2026 : REGLES.acre.depuisJuillet2026);
+        }
+      }
+      return { social, cfp: a.cfp, vl: p.vl === "oui" ? a.vl : 0 };
+    }
+
+    function computeStats(p, recettes, annee) {
+      const rows = recettes.filter(r => (r.date || "").startsWith(String(annee)));
+      const parMois = Array(12).fill(0);
+      let ca = 0, cotis = 0, impot = 0;
+      rows.forEach(r => {
+        const m = Number(r.date.slice(5,7)) - 1;
+        const montant = Number(r.montant) || 0;
+        parMois[m] += montant; ca += montant;
+        const t = tauxEffectif(p, r.date);
+        cotis += montant * (t.social + t.cfp) / 100;
+        impot += montant * t.vl / 100;
+      });
+      const now = new Date();
+      const moisEcoules = annee === now.getFullYear() ? now.getMonth() + 1 : 12;
+      const moisActifs = parMois.slice(0, moisEcoules).filter(x => x > 0).length || 1;
+      const projection = annee === now.getFullYear() ? (ca / Math.max(moisEcoules, 1)) * 12 : ca;
+      return { ca, cotis, impot, net: ca - cotis - impot, parMois, projection, moyenne: ca / moisActifs, nb: rows.length };
+    }
+
+    // ── API ────────────────────────────────────────────────────────────────
+
+    const KEY_STORAGE = "capmicro_api_key";
+
+    async function callAPI(system, messages, tokens = 1800) {
+      const key = localStorage.getItem(KEY_STORAGE);
+      if (!key) throw new Error("NO_KEY");
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": key,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({ model:"claude-sonnet-5", max_tokens:tokens, system, messages }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      return data.content?.map(b => b.text || "").join("\n") || "";
+    }
+
+    function extractBlocks(text, tag) {
+      const re = new RegExp("```" + tag + "\\s*([\\s\\S]*?)```", "g");
+      const blocks = [];
+      const clean = text.replace(re, (m, body) => {
+        try { blocks.push(JSON.parse(body.trim())); } catch(e) {}
+        return "";
+      }).trim();
+      return { clean, blocks };
+    }
+
+    // ── PROFIL & SYSTEM PROMPT ─────────────────────────────────────────────
+
+    function buildProfileSummary(p) {
+      const a = activiteOf(p);
+      const lines = [
+        `Prénom : ${p.prenom || "non précisé"}`,
+        `État : ${p.etat === "creee" ? `micro-entreprise déjà créée${p.siret ? ` (SIRET ${p.siret})` : ""}` : "projet de création"}`,
+        `Activité décrite : ${p.activiteDesc || "non précisée"}`,
+        `Catégorie : ${a.label} (${a.nature}, chambre : ${a.chambre}) — cotisations ${a.taux} % + CFP ${a.cfp} %`,
+        `Activité artisanale réglementée : ${p.reglementee ? "oui" : "non"} · Travaux du bâtiment : ${p.batiment ? "oui" : "non"}`,
+        `Situation actuelle : ${SITUATIONS.find(s => s.id === p.situation)?.label || "non précisée"}`,
+        `Clientèle : ${CLIENTS.find(c => c.id === p.clients)?.label || "non précisée"}`,
+        `Lieu d'exercice : ${LIEUX.find(l => l.id === p.lieu)?.label || "non précisé"} · Vente/présence en ligne : ${p.enLigne ? "oui" : "non"} · Clients/fournisseurs dans l'UE : ${p.ue ? "oui" : "non"}`,
+        `Date de début (prévue ou réelle) : ${fmtDate(p.dateDebut)}`,
+        `Périodicité de déclaration : ${p.periodicite}`,
+        `Versement libératoire : ${p.vl} · ACRE : ${p.acre} · TVA : ${p.tva === "assujetti" ? "redevable de la TVA" : "franchise en base (art. 293 B du CGI)"}`,
+      ];
+      return lines.map(l => `- ${l}`).join("\n");
+    }
+
+    function buildAdvisorSystem(p, ctx) {
+      const a = activiteOf(p);
+      return `Tu es "Cap Micro", le copilote expert des micro-entrepreneurs (auto-entrepreneurs) en France. Tu combines les compétences d'un conseiller CCI/CMA, d'un expert-comptable spécialisé micro-entreprise et d'un coach business. Tu es direct, concret, chaleureux, jamais jargonnant sans expliquer. Nous sommes le ${fmtDate(todayISO())}.
+
+CE QUE TU CONNAIS (règles en vigueur — ${REGLES.majLe}) :
+- Création : déclaration gratuite et obligatoire sur le guichet unique formalites.entreprises.gouv.fr (INPI), immatriculation automatique au RNE, SIREN/SIRET et code APE par l'INSEE. Méfie-toi et alerte sur les sites payants qui imitent les services officiels.
+- Taux de cotisations sociales ${REGLES.annee} (sur CA encaissé) : vente de marchandises 12,3 % ; prestations de services BIC (commerciales et artisanales) 21,2 % ; libéral non réglementé (SSI, BNC) 25,6 % ; libéral Cipav 23,2 %. + contribution à la formation professionnelle : 0,1 % (commerçants), 0,3 % (artisans), 0,2 % (libéraux).
+- Versement libératoire de l'IR : 1 % (vente), 1,7 % (services BIC), 2,2 % (BNC), sous condition de revenu fiscal de référence N-2. Sinon abattement forfaitaire : 71 % / 50 % / 34 % (minimum 305 €).
+- Plafonds de CA ${REGLES.annee} : 203 100 € (vente, hébergement) et 83 600 € (services, libéral).
+- Franchise en base de TVA ${REGLES.annee} : 85 000 € (vente) / 37 500 € (services), seuils majorés 93 500 € / 41 250 € ; le projet de seuil unique à 25 000 € a été abandonné. Mention obligatoire en franchise : « TVA non applicable, art. 293 B du CGI ».
+- ACRE : réduction de cotisations jusqu'à la fin du 3e trimestre civil suivant la création, à demander explicitement ; depuis le 1er juillet 2026, l'exonération n'est plus que de 25 % (on paie 75 % du taux normal), contre 50 % auparavant.
+- CFE : exonération l'année de création, -50 % l'année suivante si la déclaration initiale 1447-C-SD est déposée avant le 31/12 de l'année de création ; paiement au 15 décembre ; exonération si CA ≤ 5 000 €.
+- Compte bancaire dédié obligatoire si CA > 10 000 € deux années civiles consécutives. Livre des recettes obligatoire (+ registre des achats en vente). Médiateur de la consommation obligatoire en B2C. Mention "EI" ou "Entrepreneur individuel" obligatoire accolée au nom sur tous les documents commerciaux.
+- Déclaration du CA mensuelle ou trimestrielle, même à 0 € ; perte du statut après 24 mois / 8 trimestres consécutifs à 0 € ; déclaration annuelle 2042-C-PRO.
+- FACTURATION ÉLECTRONIQUE (sujet prioritaire) : depuis le 1er septembre 2026, toutes les entreprises assujetties à la TVA (micro-entrepreneurs en franchise inclus) doivent pouvoir RECEVOIR des factures électroniques via une plateforme agréée (PA, ex-PDP) ; le portail public ne fournit pas d'outil de facturation. Au 1er septembre 2027 : obligation d'ÉMETTRE en format structuré (Factur-X, UBL, CII) pour le B2B domestique et d'effectuer l'e-reporting (B2C, international, données de paiement). Nouvelles mentions : SIREN du client, adresse de livraison si différente, nature de l'opération (biens/services/mixte), option TVA sur les débits. Amende de 15 € par mention manquante ou erronée (plafonnée) ; sanctions spécifiques en cas de non-recours à la facture électronique ou d'absence d'e-reporting.
+
+TON RÔLE :
+1. CRÉATION : garantir qu'AUCUNE démarche obligatoire n'est oubliée, dans le bon ordre, adaptée à la situation (salarié, fonctionnaire, chômage, RSA, étudiant, retraité…).
+2. DÉMARCHES : préparer concrètement les démarches — réponses à saisir dans les formulaires, courriers (autorisation de cumul, résiliation, relance), CGV, mentions légales, e-mails aux clients pour récupérer leur SIREN, comparatif de plateformes agréées. Tu ne peux pas signer ni déposer à la place de l'utilisateur : tu lui donnes tout prêt à copier-coller et le lien officiel.
+3. FACTURATION : conformité des devis/factures, préparation à la réforme de la facture électronique, relances d'impayés.
+4. QUOTIDIEN & DÉVELOPPEMENT : lecture des chiffres ci-dessous, alertes sur les seuils, conseils de prix (en intégrant les cotisations), prospection, diversification, anticipation de la sortie du régime (EURL/SASU) quand c'est pertinent.
+
+RÈGLES DE CONDUITE :
+- Appuie-toi toujours sur le profil et les chiffres ci-dessous : pas de conseils génériques.
+- Chiffre tes réponses quand c'est possible (ex : prix plancher = revenu visé / (1 - taux de cotisations)).
+- Si une info manque, pose 1 à 2 questions ciblées, pas plus.
+- Donne le lien officiel pertinent (service-public.fr, urssaf.fr, impots.gouv.fr, formalites.entreprises.gouv.fr, INPI, INSEE).
+- Les règles évoluent : pour les montants et délais sensibles, invite à vérifier sur le site officiel. Pour un cas complexe (montage, litige, TVA internationale, patrimoine), recommande un expert-comptable ou un avocat — sans te défausser : donne d'abord ta meilleure analyse.
+- N'invente jamais un chiffre, un texte de loi ou un formulaire.
+
+FORMAT DE RÉPONSE :
+- Texte en français, phrases courtes, listes quand c'est utile.
+- Quand tu recommandes une action concrète à faire, ajoute un bloc (un par action, 3 maximum par message) au format EXACT :
+\`\`\`action
+{"titre":"Action courte et concrète","echeance":"AAAA-MM-JJ ou vide","detail":"1-2 phrases : comment faire"}
+\`\`\`
+  Ces blocs sont ajoutés à la liste « Mes actions » de l'utilisateur. Ne les répète pas dans ton texte.
+- Tu peux finir par 2 à 4 suggestions de relance au format EXACT :
+\`\`\`suggestions
+["Question courte 1","Question courte 2"]
+\`\`\`
+
+PROFIL :
+${buildProfileSummary(p)}
+
+AVANCEMENT DES DÉMARCHES :
+${ctx.avancement}
+
+CHIFFRES ${new Date().getFullYear()} (livre des recettes de l'utilisateur) :
+${ctx.chiffres}
+
+ACTIONS EN COURS :
+${ctx.actions}`;
+    }
+
+    // ── UI HELPERS ─────────────────────────────────────────────────────────
+
+    const inputStyle = {
+      width:"100%", background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)",
+      borderRadius:"10px", padding:"11px 13px", color:C.text, fontSize:"13px", outline:"none",
+    };
+
+    function SLabel({ children }) {
+      return <div style={{ fontSize:"10px", letterSpacing:"2.5px", color:C.textFaint, textTransform:"uppercase", marginBottom:"8px" }}>{children}</div>;
+    }
+
+    function Card({ children, style }) {
+      return <div style={{ background:C.card, border:`1px solid ${C.cardBorder}`, borderRadius:"16px", padding:"18px", marginBottom:"14px", ...style }}>{children}</div>;
+    }
+
+    function Btn({ onClick, children, kind = "ghost", disabled, style }) {
+      const kinds = {
+        primary: { background: disabled ? "rgba(255,255,255,0.06)" : C.grad, color: disabled ? "rgba(255,255,255,0.25)" : "#0b1220", border:"none", fontWeight:"600" },
+        accent:  { background:"rgba(52,211,153,0.13)", color:C.accent, border:"1px solid rgba(52,211,153,0.4)" },
+        gold:    { background:"rgba(251,191,36,0.12)", color:C.accent3, border:"1px solid rgba(251,191,36,0.4)" },
+        ghost:   { background:"rgba(255,255,255,0.05)", color:C.textDim, border:`1px solid ${C.cardBorder}` },
+        danger:  { background:"rgba(251,113,133,0.1)", color:C.danger, border:"1px solid rgba(251,113,133,0.35)" },
+      };
+      return (
+        <button onClick={onClick} disabled={disabled} style={{
+          borderRadius:"10px", padding:"10px 14px", fontSize:"12.5px", cursor: disabled ? "not-allowed" : "pointer",
+          ...kinds[kind], ...style,
+        }}>{children}</button>
+      );
+    }
+
+    function Field({ label, children, style }) {
+      return <label style={{ display:"block", marginBottom:"12px", ...style }}><SLabel>{label}</SLabel>{children}</label>;
+    }
+
+    function Input({ value, onChange, ...rest }) {
+      return <input value={value ?? ""} onChange={e => onChange(e.target.value)} style={inputStyle} {...rest} />;
+    }
+
+    function Select({ value, onChange, options }) {
+      return (
+        <select value={value ?? ""} onChange={e => onChange(e.target.value)} style={{ ...inputStyle, cursor:"pointer" }}>
+          {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      );
+    }
+
+    function ChoiceList({ options, value, onChange }) {
+      return (
+        <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+          {options.map(opt => (
+            <button key={opt.id} onClick={() => onChange(opt.id)} style={{
+              textAlign:"left", background: value===opt.id ? "rgba(52,211,153,0.12)" : "rgba(255,255,255,0.04)",
+              border:`1px solid ${value===opt.id ? "rgba(52,211,153,0.45)" : "rgba(255,255,255,0.09)"}`,
+              borderRadius:"12px", padding:"12px 14px", cursor:"pointer",
+              color: value===opt.id ? C.accent : C.textDim, fontSize:"13px", lineHeight:"1.5",
+            }}>{value===opt.id ? "● " : "○ "}{opt.label}</button>
+          ))}
+        </div>
+      );
+    }
+
+    function Toggle({ value, onChange, label }) {
+      return (
+        <button onClick={() => onChange(!value)} style={{
+          display:"flex", alignItems:"center", gap:"10px", width:"100%", textAlign:"left",
+          background:"rgba(255,255,255,0.04)", border:`1px solid ${value ? "rgba(52,211,153,0.45)" : "rgba(255,255,255,0.09)"}`,
+          borderRadius:"12px", padding:"11px 14px", cursor:"pointer", color: value ? C.accent : C.textDim, fontSize:"13px", marginBottom:"8px",
+        }}>
+          <span style={{ width:"18px", height:"18px", borderRadius:"5px", border:`1.5px solid ${value ? C.accent : C.textFaint}`, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:"12px" }}>{value ? "✓" : ""}</span>
+          {label}
+        </button>
+      );
+    }
+
+    function Pills({ options, value, onChange }) {
+      return (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:"8px" }}>
+          {options.map(o => (
+            <button key={o} onClick={() => onChange(o)} style={{
+              background: value===o ? "rgba(52,211,153,0.16)" : "rgba(255,255,255,0.04)",
+              border:`1px solid ${value===o ? "rgba(52,211,153,0.5)" : "rgba(255,255,255,0.1)"}`,
+              borderRadius:"20px", padding:"8px 14px", cursor:"pointer",
+              color: value===o ? C.accent : C.textDim, fontSize:"12.5px",
+            }}>{o}</button>
+          ))}
+        </div>
+      );
+    }
+
+    function Modal({ onClose, children, wide }) {
+      return (
+        <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.65)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:"14px" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:"#101a2e", border:`1px solid ${C.cardBorder}`, borderRadius:"18px", padding:"20px", maxWidth: wide ? "820px" : "540px", width:"100%", maxHeight:"90vh", overflowY:"auto", color:C.text, fontFamily:"Georgia, serif" }}>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    function TextModal({ title, text, filename, onClose }) {
+      const [copied, setCopied] = useState(false);
+      return (
+        <Modal onClose={onClose}>
+          <div style={{ fontSize:"14px", color:C.accent, marginBottom:"12px" }}>{title}</div>
+          <textarea readOnly value={text} style={{ width:"100%", minHeight:"320px", background:"rgba(255,255,255,0.04)", border:`1px solid ${C.cardBorder}`, borderRadius:"10px", padding:"14px", color:C.textDim, fontSize:"12px", lineHeight:"1.7", resize:"vertical", outline:"none", marginBottom:"14px" }}/>
+          <div style={{ display:"flex", gap:"10px", flexWrap:"wrap" }}>
+            <Btn kind="accent" onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false),2000); }}>{copied ? "✓ Copié !" : "Copier"}</Btn>
+            <Btn onClick={() => downloadFile(filename, text)}>⬇ Télécharger</Btn>
+            <Btn onClick={onClose} style={{ marginLeft:"auto" }}>Fermer</Btn>
+          </div>
+        </Modal>
+      );
+    }
+
+    function Gauge({ label, value, max, warnAt = 0.8, note }) {
+      const pct = Math.min(100, Math.round((value / max) * 100));
+      const color = value >= max ? C.danger : value >= max * warnAt ? C.accent3 : C.accent;
+      return (
+        <div style={{ marginBottom:"14px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:"12px", marginBottom:"5px" }}>
+            <span style={{ color:C.textDim }}>{label}</span>
+            <span style={{ color }}>{eur(value)} / {eur(max)}</span>
+          </div>
+          <div style={{ height:"7px", background:"rgba(255,255,255,0.07)", borderRadius:"6px", overflow:"hidden" }}>
+            <div style={{ height:"100%", width:`${pct}%`, background:color, transition:"width 0.4s" }}/>
+          </div>
+          {note && <div style={{ fontSize:"11px", color:C.textFaint, marginTop:"4px" }}>{note}</div>}
+        </div>
+      );
+    }
+
+    // ── SETUP API (optionnel) ──────────────────────────────────────────────
+
+    function ApiKeyForm({ onSaved }) {
+      const [key, setKey] = useState("");
+      const [error, setError] = useState("");
+      const [testing, setTesting] = useState(false);
+      const has = !!localStorage.getItem(KEY_STORAGE);
+
+      const save = async () => {
+        if (!key.trim().startsWith("sk-ant-")) { setError("La clé doit commencer par « sk-ant-… »"); return; }
+        setTesting(true); setError("");
+        try {
+          localStorage.setItem(KEY_STORAGE, key.trim());
+          await callAPI("Tu es un assistant.", [{ role:"user", content:"Dis juste : OK" }], 10);
+          setKey(""); onSaved && onSaved();
+        } catch(e) {
+          localStorage.removeItem(KEY_STORAGE);
+          setError("Clé invalide ou erreur de connexion. Vérifie et réessaie.");
+        }
+        setTesting(false);
+      };
+
+      return (
+        <div>
+          <div style={{ fontSize:"12.5px", color:C.textDim, lineHeight:"1.8", marginBottom:"14px" }}>
+            Le <strong style={{ color:C.accent3 }}>Conseiller IA</strong> utilise une clé API Anthropic personnelle, stockée uniquement sur cet appareil.
+            La checklist, les factures et le suivi fonctionnent sans clé.
+          </div>
+          {has && <div style={{ fontSize:"12px", color:C.accent, marginBottom:"10px" }}>✓ Une clé est enregistrée sur cet appareil.</div>}
+          <a href="https://console.anthropic.com/account/keys" target="_blank" rel="noopener" style={{ display:"block", textAlign:"center", background:"rgba(52,211,153,0.1)", border:"1px solid rgba(52,211,153,0.35)", borderRadius:"10px", padding:"10px", color:C.accent, fontSize:"12px", textDecoration:"none", marginBottom:"12px" }}>
+            🔑 Obtenir une clé sur console.anthropic.com →
+          </a>
+          <input type="password" value={key} onChange={e => { setKey(e.target.value); setError(""); }} onKeyDown={e => e.key==="Enter" && save()}
+            placeholder="sk-ant-api03-…" style={{ ...inputStyle, fontFamily:"monospace", marginBottom:"8px", borderColor: error ? "rgba(251,113,133,0.5)" : "rgba(255,255,255,0.12)" }} />
+          {error && <div style={{ fontSize:"11px", color:C.danger, marginBottom:"8px" }}>{error}</div>}
+          <div style={{ display:"flex", gap:"8px" }}>
+            <Btn kind="primary" onClick={save} disabled={!key.trim() || testing} style={{ flex:1 }}>{testing ? "Vérification…" : has ? "Remplacer la clé" : "Activer le Conseiller"}</Btn>
+            {has && <Btn kind="danger" onClick={() => { localStorage.removeItem(KEY_STORAGE); onSaved && onSaved(); }}>Supprimer</Btn>}
+          </div>
+        </div>
+      );
+    }
+
+    // ── INSTALL BANNER ─────────────────────────────────────────────────────
+
+    function InstallBanner() {
+      const [visible, setVisible] = useState(false);
+      useEffect(() => {
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+        const isAndroid = /android/i.test(navigator.userAgent);
+        const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+        const dismissed = localStorage.getItem("capmicro_install_dismissed");
+        if ((isIOS || isAndroid) && !isStandalone && !dismissed) setVisible(true);
+      }, []);
+      if (!visible) return null;
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      return (
+        <div className="no-print" style={{ position:"fixed", top:"env(safe-area-inset-top, 12px)", left:"12px", right:"12px", background:"rgba(11,18,32,0.97)", border:"1px solid rgba(52,211,153,0.35)", borderRadius:"16px", padding:"14px", zIndex:1000, display:"flex", gap:"12px", alignItems:"flex-start", animation:"fadeIn 0.4s ease" }}>
+          <span style={{ fontSize:"22px" }}>📲</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:"13px", color:C.accent, marginBottom:"4px" }}>Installer Cap Micro sur l'écran d'accueil</div>
+            <div style={{ fontSize:"11px", color:C.textDim, lineHeight:"1.6" }}>
+              {isIOS ? "Bouton Partager (⎙) de Safari, puis « Sur l'écran d'accueil »" : "Menu (⋮) de Chrome, puis « Ajouter à l'écran d'accueil »"}
+            </div>
+          </div>
+          <button onClick={() => { localStorage.setItem("capmicro_install_dismissed","1"); setVisible(false); }} style={{ background:"transparent", border:"none", color:C.textFaint, fontSize:"18px", cursor:"pointer" }}>×</button>
+        </div>
+      );
+    }
+
+    // ── ONBOARDING ─────────────────────────────────────────────────────────
+
+    const EMPTY_PROFILE = {
+      prenom:"", etat:"projet", siret:"", activiteDesc:"", activite:null, reglementee:false, batiment:false,
+      situation:null, clients:null, lieu:null, enLigne:false, ue:false,
+      dateDebut: todayISO(), periodicite:"trimestrielle", vl:"je ne sais pas", acre:"je ne sais pas", tva:"franchise",
+    };
+
+    function OnboardingWizard({ initial, onComplete, onCancel }) {
+      const [step, setStep] = useState(0);
+      const [p, setP] = useState(initial || EMPTY_PROFILE);
+      const set = (k, v) => setP(prev => ({ ...prev, [k]: v }));
+      const STEPS = 5;
+      const canNext = [
+        !!p.prenom.trim(),
+        !!p.activite && !!p.activiteDesc.trim(),
+        !!p.situation,
+        !!p.clients && !!p.lieu,
+        !!p.dateDebut,
+      ][step];
+
+      return (
+        <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"Georgia, serif", color:C.text }}>
+          <div style={{ maxWidth:"560px", margin:"0 auto", padding:"32px 16px calc(env(safe-area-inset-bottom,0px) + 40px)" }}>
+            <div style={{ textAlign:"center", marginBottom:"24px" }}>
+              <div style={{ fontSize:"40px", marginBottom:"6px", animation:"bob 3s ease-in-out infinite", display:"inline-block" }}>🚀</div>
+              <h1 style={{ fontSize:"1.6rem", fontWeight:"400", background:C.grad, WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Cap Micro</h1>
+              <div style={{ fontSize:"12px", color:C.textFaint, fontStyle:"italic", marginBottom:"14px" }}>Le copilote de l'auto-entrepreneur</div>
+              <div style={{ fontSize:"10px", letterSpacing:"3px", color:C.accent3, textTransform:"uppercase" }}>Étape {step+1} / {STEPS}</div>
+              <div style={{ height:"4px", background:"rgba(255,255,255,0.08)", borderRadius:"4px", marginTop:"10px", overflow:"hidden" }}>
+                <div style={{ height:"100%", width:`${Math.round(((step+1)/STEPS)*100)}%`, background:C.grad, transition:"width 0.3s" }}/>
+              </div>
+            </div>
+
+            <Card style={{ padding:"22px", animation:"fadeIn 0.35s ease" }}>
+              {step === 0 && (
+                <>
+                  <h2 style={{ fontSize:"1.15rem", fontWeight:"400", marginBottom:"6px" }}>Bienvenue 👋</h2>
+                  <p style={{ fontSize:"12.5px", color:C.textDim, lineHeight:"1.7", marginBottom:"16px" }}>
+                    En 2 minutes, Cap Micro construit <strong>ta</strong> feuille de route : toutes les démarches obligatoires pour ta situation, tes factures conformes (réforme de la facture électronique incluse), ton suivi de chiffre d'affaires et un conseiller disponible 24h/24.
+                  </p>
+                  <Field label="Ton prénom"><Input value={p.prenom} onChange={v => set("prenom", v)} placeholder="ex : Camille" /></Field>
+                  <SLabel>Où en es-tu ?</SLabel>
+                  <ChoiceList value={p.etat} onChange={v => set("etat", v)} options={[
+                    { id:"projet", label:"🌱 J'ai un projet, je n'ai pas encore créé mon auto-entreprise" },
+                    { id:"creee",  label:"✅ Mon auto-entreprise est déjà créée" },
+                  ]} />
+                  {p.etat === "creee" && <div style={{ marginTop:"12px" }}><Field label="Ton SIRET (facultatif)"><Input value={p.siret} onChange={v => set("siret", v.replace(/[^0-9]/g,"").slice(0,14))} placeholder="14 chiffres" inputMode="numeric" /></Field></div>}
+                </>
+              )}
+
+              {step === 1 && (
+                <>
+                  <h2 style={{ fontSize:"1.15rem", fontWeight:"400", marginBottom:"12px" }}>Ton activité</h2>
+                  <Field label="Décris ce que tu fais (ou vas faire)">
+                    <textarea value={p.activiteDesc} onChange={e => set("activiteDesc", e.target.value)} rows={3}
+                      placeholder="ex : création de sites web pour les artisans ; vente de bijoux faits main sur Etsy et sur les marchés…"
+                      style={{ ...inputStyle, resize:"vertical", lineHeight:"1.6" }} />
+                  </Field>
+                  <SLabel>Catégorie</SLabel>
+                  <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginBottom:"12px" }}>
+                    {ACTIVITES.map(a => (
+                      <button key={a.id} onClick={() => set("activite", a.id)} style={{
+                        textAlign:"left", display:"flex", gap:"12px", alignItems:"center",
+                        background: p.activite===a.id ? "rgba(52,211,153,0.12)" : "rgba(255,255,255,0.04)",
+                        border:`1px solid ${p.activite===a.id ? "rgba(52,211,153,0.45)" : "rgba(255,255,255,0.09)"}`,
+                        borderRadius:"12px", padding:"11px 13px", cursor:"pointer", color: p.activite===a.id ? C.accent : C.text,
+                      }}>
+                        <span style={{ fontSize:"22px" }}>{a.emoji}</span>
+                        <span>
+                          <span style={{ display:"block", fontSize:"13px" }}>{a.label} <span style={{ color:C.textFaint, fontSize:"11px" }}>· {a.nature}</span></span>
+                          <span style={{ display:"block", fontSize:"11px", color:C.textFaint }}>{a.sub}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ fontSize:"11px", color:C.textFaint, fontStyle:"italic", marginBottom:"10px" }}>Pas sûr(e) ? Choisis au plus proche : le Conseiller vérifiera avec toi.</div>
+                  {p.activite === "artisan" && <>
+                    <Toggle value={p.reglementee} onChange={v => set("reglementee", v)} label="Activité réglementée (exige un diplôme ou 3 ans d'expérience)" />
+                    <Toggle value={p.batiment} onChange={v => set("batiment", v)} label="Travaux du bâtiment / construction (décennale)" />
+                  </>}
+                </>
+              )}
+
+              {step === 2 && (
+                <>
+                  <h2 style={{ fontSize:"1.15rem", fontWeight:"400", marginBottom:"6px" }}>Ta situation actuelle</h2>
+                  <p style={{ fontSize:"12px", color:C.textFaint, marginBottom:"14px" }}>Elle change les démarches à faire avant de créer.</p>
+                  <ChoiceList options={SITUATIONS} value={p.situation} onChange={v => set("situation", v)} />
+                </>
+              )}
+
+              {step === 3 && (
+                <>
+                  <h2 style={{ fontSize:"1.15rem", fontWeight:"400", marginBottom:"14px" }}>Tes clients et ton lieu de travail</h2>
+                  <SLabel>Tu travailles pour…</SLabel>
+                  <div style={{ marginBottom:"14px" }}><ChoiceList options={CLIENTS} value={p.clients} onChange={v => set("clients", v)} /></div>
+                  <SLabel>Tu exerces…</SLabel>
+                  <div style={{ marginBottom:"14px" }}><ChoiceList options={LIEUX} value={p.lieu} onChange={v => set("lieu", v)} /></div>
+                  <Toggle value={p.enLigne} onChange={v => set("enLigne", v)} label="J'ai (ou j'aurai) un site web / je vends en ligne" />
+                  <Toggle value={p.ue} onChange={v => set("ue", v)} label="J'ai des clients ou fournisseurs dans d'autres pays de l'UE" />
+                </>
+              )}
+
+              {step === 4 && (
+                <>
+                  <h2 style={{ fontSize:"1.15rem", fontWeight:"400", marginBottom:"14px" }}>Tes options</h2>
+                  <Field label={p.etat === "creee" ? "Date de début d'activité" : "Date de début prévue"}>
+                    <input type="date" value={p.dateDebut} onChange={e => set("dateDebut", e.target.value)} style={{ ...inputStyle, colorScheme:"dark" }} />
+                  </Field>
+                  <SLabel>Déclaration du chiffre d'affaires</SLabel>
+                  <div style={{ marginBottom:"14px" }}><Pills options={["mensuelle","trimestrielle"]} value={p.periodicite} onChange={v => set("periodicite", v)} /></div>
+                  <SLabel>Versement libératoire de l'impôt</SLabel>
+                  <div style={{ marginBottom:"14px" }}><Pills options={TRISTATE} value={p.vl} onChange={v => set("vl", v)} /></div>
+                  <SLabel>ACRE (aide à la création)</SLabel>
+                  <div style={{ marginBottom:"14px" }}><Pills options={TRISTATE} value={p.acre} onChange={v => set("acre", v)} /></div>
+                  <SLabel>TVA</SLabel>
+                  <ChoiceList value={p.tva} onChange={v => set("tva", v)} options={[
+                    { id:"franchise", label:"Franchise en base (je ne facture pas la TVA) — cas le plus courant" },
+                    { id:"assujetti", label:"Je facture la TVA (seuil dépassé ou option volontaire)" },
+                  ]} />
+                </>
+              )}
+            </Card>
+
+            <div style={{ display:"flex", gap:"10px" }}>
+              {step > 0 ? <Btn onClick={() => setStep(step-1)}>← Retour</Btn> : onCancel ? <Btn onClick={onCancel}>Annuler</Btn> : null}
+              <Btn kind="primary" disabled={!canNext} style={{ flex:1, padding:"14px", fontSize:"14px" }}
+                onClick={() => step < STEPS-1 ? setStep(step+1) : onComplete(p)}>
+                {step < STEPS-1 ? "Continuer →" : "Construire ma feuille de route 🚀"}
+              </Btn>
+            </div>
+            <div style={{ fontSize:"10.5px", color:C.textFaint, textAlign:"center", marginTop:"18px", lineHeight:"1.7" }}>
+              Tes données restent sur cet appareil. Cap Micro est un outil d'aide : il ne remplace pas un expert-comptable ou un avocat.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── ONGLET CRÉATION ────────────────────────────────────────────────────
+
+    function buildDossier(p, ent) {
+      const a = activiteOf(p);
+      const L = [];
+      L.push(`🚀 MON DOSSIER DE DÉCLARATION — préparé avec Cap Micro le ${fmtDate(todayISO())}`);
+      L.push(`À saisir sur : https://formalites.entreprises.gouv.fr (service gratuit)\n`);
+      L.push(`1. FORME : Entrepreneur individuel — régime micro-entrepreneur`);
+      L.push(`2. IDENTITÉ : ${ent.nom || p.prenom || "[prénom NOM]"} — nom commercial : ${ent.nomCommercial || "(facultatif)"}`);
+      L.push(`   Coordonnées : ${ent.email || "[e-mail]"} · ${ent.tel || "[téléphone]"}`);
+      L.push(`3. ADRESSE DE L'ENTREPRISE : ${[ent.adresse, ent.cp, ent.ville].filter(Boolean).join(" ") || "[adresse]"} (${LIEUX.find(l => l.id === p.lieu)?.label || ""})`);
+      L.push(`4. ACTIVITÉ PRINCIPALE : ${p.activiteDesc}`);
+      L.push(`   Catégorie : ${a.label} — nature ${a.nature}${a.chambre !== "—" ? ` — rattachement ${a.chambre}` : ""}`);
+      L.push(`   Exercice : ${p.lieu === "itinerant" ? "non sédentaire / chez les clients" : "sédentaire"}${p.enLigne ? " + vente/présence en ligne" : ""}`);
+      if (p.activite === "artisan" && p.reglementee) L.push(`   Qualification professionnelle : joindre diplôme ou justificatifs de 3 ans d'expérience`);
+      L.push(`5. DATE DE DÉBUT D'ACTIVITÉ : ${fmtDate(p.dateDebut)}`);
+      L.push(`6. OPTIONS SOCIALES ET FISCALES`);
+      L.push(`   - Périodicité de déclaration et de paiement : ${p.periodicite}`);
+      L.push(`   - Versement libératoire de l'impôt sur le revenu : ${p.vl === "oui" ? "OUI" : p.vl === "non" ? "NON" : "à décider (demande au Conseiller)"}`);
+      L.push(`   - Demande d'ACRE : ${p.acre === "oui" ? "OUI — cocher la demande" : p.acre === "non" ? "non" : "à vérifier (éligibilité)"}`);
+      L.push(`   - TVA : ${p.tva === "assujetti" ? "option pour le paiement de la TVA / redevable" : "franchise en base de TVA"}`);
+      L.push(`7. PIÈCES À JOINDRE`);
+      L.push(`   - Pièce d'identité recto-verso`);
+      L.push(`   - Justificatif de domicile de moins de 3 mois`);
+      L.push(`   - Déclaration de non-condamnation (signée électroniquement)`);
+      L.push(`   - Si marié(e) sous un régime de communauté : attestation d'information du conjoint`);
+      L.push(`\nAPRÈS VALIDATION : attends ton SIRET (1 à 4 semaines), puis continue la checklist dans Cap Micro.`);
+      L.push(`⚠️ Aucun site ne doit te faire payer cette formalité : elle est gratuite sur le guichet officiel.`);
+      return L.join("\n");
+    }
+
+    function StepCard({ step, done, onToggle, onAsk }) {
+      const [open, setOpen] = useState(false);
+      return (
+        <div style={{ background: done ? "rgba(52,211,153,0.05)" : "rgba(255,255,255,0.035)", border:`1px solid ${done ? "rgba(52,211,153,0.25)" : C.cardBorder}`, borderRadius:"13px", marginBottom:"8px", overflow:"hidden" }}>
+          <div style={{ display:"flex", gap:"10px", alignItems:"flex-start", padding:"12px" }}>
+            <button onClick={onToggle} aria-label="Marquer comme fait" style={{ width:"22px", height:"22px", borderRadius:"7px", flexShrink:0, marginTop:"1px", cursor:"pointer", background: done ? C.accent : "transparent", border:`1.5px solid ${done ? C.accent : C.textFaint}`, color:"#0b1220", fontSize:"13px", fontWeight:"700" }}>{done ? "✓" : ""}</button>
+            <button onClick={() => setOpen(!open)} style={{ flex:1, textAlign:"left", background:"transparent", border:"none", cursor:"pointer", color: done ? C.textFaint : C.text, fontSize:"13px", lineHeight:"1.5", textDecoration: done ? "line-through" : "none" }}>
+              {step.titre}
+              <span style={{ display:"inline-block", marginLeft:"8px", fontSize:"9.5px", letterSpacing:"1px", textTransform:"uppercase", padding:"2px 7px", borderRadius:"10px", textDecoration:"none", verticalAlign:"middle",
+                background: step.obligatoire ? "rgba(251,113,133,0.12)" : "rgba(129,140,248,0.12)", color: step.obligatoire ? C.danger : C.accent2 }}>
+                {step.obligatoire ? "obligatoire" : "conseillé"}
+              </span>
+            </button>
+            <span onClick={() => setOpen(!open)} style={{ color:C.textFaint, fontSize:"12px", cursor:"pointer", paddingTop:"2px" }}>{open ? "▲" : "▼"}</span>
+          </div>
+          {open && (
+            <div style={{ padding:"0 14px 14px 44px", animation:"fadeIn 0.25s ease" }}>
+              <div style={{ fontSize:"12.5px", color:C.textDim, lineHeight:"1.7", marginBottom:"8px" }}>{step.pourquoi}</div>
+              {step.comment.length > 0 && (
+                <ul style={{ margin:"0 0 10px 16px", fontSize:"12px", color:C.textDim, lineHeight:"1.7" }}>
+                  {step.comment.map((c,i) => <li key={i}>{c}</li>)}
+                </ul>
+              )}
+              <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
+                {step.lien && <a href={step.lien.url} target="_blank" rel="noopener" style={{ fontSize:"12px", color:C.accent, textDecoration:"none", border:"1px solid rgba(52,211,153,0.35)", borderRadius:"9px", padding:"7px 11px" }}>🔗 {step.lien.label}</a>}
+                <Btn kind="gold" onClick={onAsk} style={{ padding:"7px 11px", fontSize:"12px" }}>💬 M'aider sur cette étape</Btn>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function CreationTab({ profile, store, patch, askAdvisor }) {
+      const steps = useMemo(() => buildChecklist(profile), [profile]);
+      const done = store.steps || {};
+      const [dossier, setDossier] = useState(false);
+      const [onlyTodo, setOnlyTodo] = useState(false);
+      const oblig = steps.filter(s => s.obligatoire);
+      const obligDone = oblig.filter(s => done[s.id]).length;
+      const allDone = steps.filter(s => done[s.id]).length;
+      const pct = Math.round((allDone / steps.length) * 100);
+      const toggle = (id) => patch({ steps: { ...done, [id]: !done[id] } });
+
+      return (
+        <div>
+          <Card>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:"8px" }}>
+              <div style={{ fontSize:"15px" }}>{profile.etat === "creee" ? "Ta conformité" : "Ta feuille de route"}</div>
+              <div style={{ fontSize:"22px", background:C.grad, WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>{pct} %</div>
+            </div>
+            <div style={{ height:"7px", background:"rgba(255,255,255,0.07)", borderRadius:"6px", overflow:"hidden", marginBottom:"10px" }}>
+              <div style={{ height:"100%", width:`${pct}%`, background:C.grad, transition:"width 0.4s" }}/>
+            </div>
+            <div style={{ fontSize:"12px", color:C.textDim, marginBottom:"12px" }}>
+              {obligDone}/{oblig.length} démarches obligatoires faites · {steps.length} étapes au total, adaptées à ton profil
+            </div>
+            <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
+              {profile.etat !== "creee" && <Btn kind="accent" onClick={() => setDossier(true)}>📄 Préparer mon dossier de déclaration</Btn>}
+              <Btn onClick={() => setOnlyTodo(!onlyTodo)}>{onlyTodo ? "Tout afficher" : "Masquer les étapes faites"}</Btn>
+            </div>
+          </Card>
+
+          {PHASES.map(ph => {
+            const list = steps.filter(s => s.phase === ph.id);
+            const visible = onlyTodo ? list.filter(s => !done[s.id]) : list;
+            if (!list.length) return null;
+            const d = list.filter(s => done[s.id]).length;
+            return (
+              <div key={ph.id} style={{ marginBottom:"18px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", margin:"4px 2px 8px" }}>
+                  <div style={{ fontSize:"11px", letterSpacing:"2px", textTransform:"uppercase", color:C.accent3 }}>{ph.emoji} {ph.label}</div>
+                  <div style={{ fontSize:"11px", color: d === list.length ? C.accent : C.textFaint }}>{d}/{list.length}</div>
+                </div>
+                {ph.id === "efacture" && (
+                  <div style={{ fontSize:"11.5px", color:C.textDim, background:"rgba(251,191,36,0.07)", border:"1px solid rgba(251,191,36,0.25)", borderRadius:"10px", padding:"9px 12px", marginBottom:"8px", lineHeight:"1.6" }}>
+                    ⚡ Réception obligatoire depuis le {fmtDate(REGLES.facturationElec.reception)} · émission obligatoire dans <strong style={{ color:C.accent3 }}>{Math.max(0, daysBetween(todayISO(), REGLES.facturationElec.emission))} jours</strong> ({fmtDate(REGLES.facturationElec.emission)})
+                  </div>
+                )}
+                {visible.map(s => <StepCard key={s.id} step={s} done={!!done[s.id]} onToggle={() => toggle(s.id)}
+                  onAsk={() => askAdvisor(`Aide-moi concrètement sur l'étape « ${s.titre} » : que dois-je faire exactement dans ma situation, et peux-tu me préparer ce qu'il faut (texte à saisir, courrier, liste) ?`)} />)}
+                {onlyTodo && visible.length === 0 && <div style={{ fontSize:"12px", color:C.accent, padding:"4px 4px 0" }}>✓ Phase terminée</div>}
+              </div>
+            );
+          })}
+
+          {dossier && <TextModal title="📄 Mon dossier de déclaration (guichet unique)" text={buildDossier(profile, store.entreprise || {})} filename="dossier-declaration-micro-entreprise.txt" onClose={() => setDossier(false)} />}
+        </div>
+      );
+    }
+
+    // ── FACTURATION ────────────────────────────────────────────────────────
+
+    const EMPTY_ENT = { nom:"", nomCommercial:"", adresse:"", cp:"", ville:"", siret:"", email:"", tel:"", iban:"", bic:"", assurance:"", tvaIntra:"", penalites:"3 fois le taux d'intérêt légal", delai:30, mediateur:"" };
+
+    function docTotals(doc, p) {
+      const franchise = p.tva !== "assujetti";
+      let ht = 0, tva = 0;
+      (doc.lignes || []).forEach(l => {
+        const lht = round2((Number(l.qte) || 0) * (Number(l.pu) || 0));
+        ht += lht;
+        if (!franchise) tva += round2(lht * (Number(l.tva ?? 20) / 100));
+      });
+      return { ht: round2(ht), tva: round2(tva), ttc: round2(ht + tva), franchise };
+    }
+
+    function natureOperation(doc) {
+      const kinds = new Set((doc.lignes || []).map(l => l.nature || "service"));
+      return kinds.size > 1 ? "Mixte (livraison de biens et prestation de services)" : kinds.has("bien") ? "Livraison de biens" : "Prestation de services";
+    }
+
+    function conformite(doc, ent, client, p) {
+      const pro = client?.type === "pro";
+      const checks = [
+        { ok: !!(ent.nom && /\bEI\b|Entrepreneur individuel/i.test(ent.nom + " " + ent.nomCommercial)), label:"Ton nom suivi de la mention « EI » ou « Entrepreneur individuel »", where:"Mon entreprise" },
+        { ok: !!(ent.adresse && ent.cp && ent.ville), label:"Ton adresse complète", where:"Mon entreprise" },
+        { ok: /^\d{14}$/.test(ent.siret || ""), label:"Ton SIRET (14 chiffres)", where:"Mon entreprise" },
+        { ok: !!client, label:"Client sélectionné", where:"Document" },
+        { ok: !!(client?.adresse && client?.cp && client?.ville), label:"Adresse de facturation du client", where:"Clients" },
+        { ok: !pro || /^\d{9}$/.test((client?.siren || "").replace(/\s/g,"")), label:"SIREN du client professionnel (nouvelle mention)", where:"Clients" },
+        { ok: (doc.lignes || []).length > 0 && doc.lignes.every(l => l.designation && Number(l.qte) > 0), label:"Désignation et quantité de chaque ligne", where:"Document" },
+        { ok: !!doc.dateOperation, label:"Date de la vente ou de la prestation", where:"Document" },
+        { ok: !!doc.echeance, label:"Date d'échéance du paiement", where:"Document" },
+        { ok: !(p.batiment || p.activite === "cipav") || !!ent.assurance, label:"Assurance professionnelle obligatoire (assureur, couverture)", where:"Mon entreprise" },
+        { ok: !isB2C(p) || client?.type === "pro" || !!ent.mediateur, label:"Coordonnées du médiateur de la consommation (clients particuliers)", where:"Mon entreprise" },
+      ];
+      return checks;
+    }
+
+    function InvoicePaper({ doc, ent, client, p }) {
+      const t = docTotals(doc, p);
+      const isFacture = doc.type === "facture";
+      const pro = client?.type === "pro";
+      const cell = { padding:"7px 8px", borderBottom:"1px solid #e5e7eb", fontSize:"12px" };
+      return (
+        <div style={{ background:"#fff", color:"#111827", fontFamily:"Helvetica, Arial, sans-serif", padding:"34px", borderRadius:"6px", lineHeight:1.5 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", gap:"20px", marginBottom:"26px", flexWrap:"wrap" }}>
+            <div style={{ fontSize:"12px" }}>
+              <div style={{ fontSize:"16px", fontWeight:"700" }}>{ent.nomCommercial || ent.nom}</div>
+              {ent.nomCommercial && <div>{ent.nom}</div>}
+              <div>{ent.adresse}</div>
+              <div>{ent.cp} {ent.ville}</div>
+              <div>SIRET : {ent.siret}</div>
+              {ent.tvaIntra && <div>N° TVA : {ent.tvaIntra}</div>}
+              {ent.email && <div>{ent.email}</div>}
+              {ent.tel && <div>{ent.tel}</div>}
+            </div>
+            <div style={{ textAlign:"right" }}>
+              <div style={{ fontSize:"22px", fontWeight:"700", letterSpacing:"1px" }}>{isFacture ? "FACTURE" : "DEVIS"}</div>
+              <div style={{ fontSize:"12px" }}>N° {doc.numero || "(brouillon)"}</div>
+              <div style={{ fontSize:"12px" }}>Date : {fmtDate(doc.date)}</div>
+              {!isFacture && <div style={{ fontSize:"12px" }}>Valable jusqu'au : {fmtDate(doc.validite)}</div>}
+            </div>
+          </div>
+          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:"22px" }}>
+            <div style={{ border:"1px solid #e5e7eb", borderRadius:"6px", padding:"12px 16px", minWidth:"240px", fontSize:"12px" }}>
+              <div style={{ fontSize:"10px", textTransform:"uppercase", color:"#6b7280", letterSpacing:"1px" }}>{isFacture ? "Facturé à" : "Client"}</div>
+              <div style={{ fontWeight:"700" }}>{client?.nom || "—"}</div>
+              <div>{client?.adresse}</div>
+              <div>{client?.cp} {client?.ville}{client?.pays && client.pays !== "France" ? ` — ${client.pays}` : ""}</div>
+              {pro && client?.siren && <div>SIREN : {client.siren}</div>}
+              {client?.tvaIntra && <div>N° TVA : {client.tvaIntra}</div>}
+              {doc.adresseLivraison && <div style={{ marginTop:"6px" }}><span style={{ color:"#6b7280" }}>Livraison : </span>{doc.adresseLivraison}</div>}
+            </div>
+          </div>
+          <div style={{ fontSize:"12px", marginBottom:"8px" }}>
+            <strong>Nature de l'opération :</strong> {natureOperation(doc)} · <strong>Date de {natureOperation(doc).startsWith("Livraison") ? "livraison" : "réalisation"} :</strong> {fmtDate(doc.dateOperation)}
+          </div>
+          {doc.objet && <div style={{ fontSize:"12px", marginBottom:"10px" }}><strong>Objet :</strong> {doc.objet}</div>}
+          <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:"14px" }}>
+            <thead>
+              <tr style={{ background:"#f3f4f6" }}>
+                <th style={{ ...cell, textAlign:"left" }}>Désignation</th>
+                <th style={{ ...cell, textAlign:"right" }}>Qté</th>
+                <th style={{ ...cell, textAlign:"right" }}>PU HT</th>
+                {!t.franchise && <th style={{ ...cell, textAlign:"right" }}>TVA</th>}
+                <th style={{ ...cell, textAlign:"right" }}>Total HT</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(doc.lignes || []).map((l,i) => (
+                <tr key={i}>
+                  <td style={cell}>{l.designation}</td>
+                  <td style={{ ...cell, textAlign:"right" }}>{l.qte} {l.unite || ""}</td>
+                  <td style={{ ...cell, textAlign:"right" }}>{eur(l.pu)}</td>
+                  {!t.franchise && <td style={{ ...cell, textAlign:"right" }}>{l.tva ?? 20} %</td>}
+                  <td style={{ ...cell, textAlign:"right" }}>{eur((Number(l.qte)||0) * (Number(l.pu)||0))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:"18px" }}>
+            <div style={{ minWidth:"240px", fontSize:"13px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between" }}><span>Total HT</span><span>{eur(t.ht)}</span></div>
+              {!t.franchise && <div style={{ display:"flex", justifyContent:"space-between" }}><span>TVA</span><span>{eur(t.tva)}</span></div>}
+              <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"700", fontSize:"15px", borderTop:"2px solid #111827", marginTop:"6px", paddingTop:"6px" }}>
+                <span>{t.franchise ? "Net à payer" : "Total TTC"}</span><span>{eur(t.ttc)}</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ fontSize:"10.5px", color:"#374151", borderTop:"1px solid #e5e7eb", paddingTop:"12px" }}>
+            {t.franchise && <div><strong>TVA non applicable, art. 293 B du CGI.</strong></div>}
+            {isFacture ? <>
+              <div>Échéance de paiement : {fmtDate(doc.echeance)}{ent.iban ? ` — par virement : IBAN ${ent.iban}${ent.bic ? ` · BIC ${ent.bic}` : ""}` : ""}.</div>
+              <div>Pas d'escompte pour paiement anticipé. En cas de retard de paiement, pénalités exigibles au taux de {ent.penalites || "3 fois le taux d'intérêt légal"}{pro ? ", et indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 et D441-5 du Code de commerce)" : ""}.</div>
+            </> : <>
+              <div>Devis gratuit. Pour accepter : retourner ce devis daté et signé avec la mention « Bon pour accord ».</div>
+              <div style={{ marginTop:"18px", display:"flex", justifyContent:"space-between" }}><span>Date :</span><span style={{ minWidth:"200px" }}>Signature du client :</span></div>
+              <div style={{ height:"40px" }}/>
+            </>}
+            {ent.assurance && <div>Assurance professionnelle : {ent.assurance}.</div>}
+            {ent.mediateur && client?.type !== "pro" && <div>Médiateur de la consommation : {ent.mediateur}.</div>}
+            {doc.notes && <div style={{ marginTop:"6px" }}>{doc.notes}</div>}
+          </div>
+        </div>
+      );
+    }
+
+    function buildCII(doc, ent, client, p) {
+      const t = docTotals(doc, p);
+      const d = (s) => (s || todayISO()).replace(/-/g, "");
+      const siren = (ent.siret || "").slice(0, 9);
+      const cat = t.franchise ? "E" : "S";
+      const lines = (doc.lignes || []).map((l, i) => {
+        const lht = round2((Number(l.qte)||0) * (Number(l.pu)||0));
+        const rate = t.franchise ? 0 : Number(l.tva ?? 20);
+        return `    <ram:IncludedSupplyChainTradeLineItem>
+      <ram:AssociatedDocumentLineDocument><ram:LineID>${i+1}</ram:LineID></ram:AssociatedDocumentLineDocument>
+      <ram:SpecifiedTradeProduct><ram:Name>${escXml(l.designation)}</ram:Name></ram:SpecifiedTradeProduct>
+      <ram:SpecifiedLineTradeAgreement><ram:NetPriceProductTradePrice><ram:ChargeAmount>${Number(l.pu||0).toFixed(2)}</ram:ChargeAmount></ram:NetPriceProductTradePrice></ram:SpecifiedLineTradeAgreement>
+      <ram:SpecifiedLineTradeDelivery><ram:BilledQuantity unitCode="C62">${Number(l.qte||0)}</ram:BilledQuantity></ram:SpecifiedLineTradeDelivery>
+      <ram:SpecifiedLineTradeSettlement>
+        <ram:ApplicableTradeTax><ram:TypeCode>VAT</ram:TypeCode><ram:CategoryCode>${cat}</ram:CategoryCode><ram:RateApplicablePercent>${rate}</ram:RateApplicablePercent></ram:ApplicableTradeTax>
+        <ram:SpecifiedTradeSettlementLineMonetarySummation><ram:LineTotalAmount>${lht.toFixed(2)}</ram:LineTotalAmount></ram:SpecifiedTradeSettlementLineMonetarySummation>
+      </ram:SpecifiedLineTradeSettlement>
+    </ram:IncludedSupplyChainTradeLineItem>`;
+      }).join("\n");
+
+      // Regroupement de TVA par taux
+      const groups = {};
+      (doc.lignes || []).forEach(l => {
+        const rate = t.franchise ? 0 : Number(l.tva ?? 20);
+        const lht = round2((Number(l.qte)||0) * (Number(l.pu)||0));
+        groups[rate] = groups[rate] || { base:0, tax:0 };
+        groups[rate].base += lht;
+        groups[rate].tax += t.franchise ? 0 : round2(lht * rate / 100);
+      });
+      const taxes = Object.entries(groups).map(([rate, g]) => `      <ram:ApplicableTradeTax>
+        <ram:CalculatedAmount>${g.tax.toFixed(2)}</ram:CalculatedAmount>
+        <ram:TypeCode>VAT</ram:TypeCode>${t.franchise ? `
+        <ram:ExemptionReason>TVA non applicable, art. 293 B du CGI</ram:ExemptionReason>` : ""}
+        <ram:BasisAmount>${g.base.toFixed(2)}</ram:BasisAmount>
+        <ram:CategoryCode>${cat}</ram:CategoryCode>${t.franchise ? `
+        <ram:ExemptionReasonCode>VATEX-FR-FRANCHISE</ram:ExemptionReasonCode>` : ""}
+        <ram:RateApplicablePercent>${rate}</ram:RateApplicablePercent>
+      </ram:ApplicableTradeTax>`).join("\n");
+
+      const party = (tag, name, addr, cp, ville, pays, sirenId, tvaId) => `      <ram:${tag}>
+        <ram:Name>${escXml(name)}</ram:Name>${sirenId ? `
+        <ram:SpecifiedLegalOrganization><ram:ID schemeID="0002">${escXml(sirenId)}</ram:ID></ram:SpecifiedLegalOrganization>` : ""}
+        <ram:PostalTradeAddress>
+          <ram:PostcodeCode>${escXml(cp)}</ram:PostcodeCode>
+          <ram:LineOne>${escXml(addr)}</ram:LineOne>
+          <ram:CityName>${escXml(ville)}</ram:CityName>
+          <ram:CountryID>${escXml(pays)}</ram:CountryID>
+        </ram:PostalTradeAddress>${tvaId ? `
+        <ram:SpecifiedTaxRegistration><ram:ID schemeID="VA">${escXml(tvaId)}</ram:ID></ram:SpecifiedTaxRegistration>` : ""}
+      </ram:${tag}>`;
+      const countryCode = (c) => !c || /^france$/i.test(c) ? "FR" : c.length === 2 ? c.toUpperCase() : c.slice(0,2).toUpperCase();
+
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<!-- Généré par Cap Micro — format CII (UN/CEFACT), profil EN 16931. À transmettre via ta plateforme agréée. -->
+<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
+  <rsm:ExchangedDocumentContext>
+    <ram:GuidelineSpecifiedDocumentContextParameter><ram:ID>urn:cen.eu:en16931:2017</ram:ID></ram:GuidelineSpecifiedDocumentContextParameter>
+  </rsm:ExchangedDocumentContext>
+  <rsm:ExchangedDocument>
+    <ram:ID>${escXml(doc.numero)}</ram:ID>
+    <ram:TypeCode>380</ram:TypeCode>
+    <ram:IssueDateTime><udt:DateTimeString format="102">${d(doc.date)}</udt:DateTimeString></ram:IssueDateTime>${t.franchise ? `
+    <ram:IncludedNote><ram:Content>TVA non applicable, art. 293 B du CGI</ram:Content></ram:IncludedNote>` : ""}
+    <ram:IncludedNote><ram:Content>Nature de l'opération : ${escXml(natureOperation(doc))}</ram:Content></ram:IncludedNote>
+  </rsm:ExchangedDocument>
+  <rsm:SupplyChainTradeTransaction>
+${lines}
+    <ram:ApplicableHeaderTradeAgreement>
+${party("SellerTradeParty", ent.nom, ent.adresse, ent.cp, ent.ville, "FR", siren, ent.tvaIntra)}
+${party("BuyerTradeParty", client?.nom, client?.adresse, client?.cp, client?.ville, countryCode(client?.pays), client?.type === "pro" ? (client?.siren || "").replace(/\s/g,"") : "", client?.tvaIntra)}
+    </ram:ApplicableHeaderTradeAgreement>
+    <ram:ApplicableHeaderTradeDelivery>
+      <ram:ActualDeliverySupplyChainEvent><ram:OccurrenceDateTime><udt:DateTimeString format="102">${d(doc.dateOperation)}</udt:DateTimeString></ram:OccurrenceDateTime></ram:ActualDeliverySupplyChainEvent>
+    </ram:ApplicableHeaderTradeDelivery>
+    <ram:ApplicableHeaderTradeSettlement>
+      <ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>${ent.iban ? `
+      <ram:SpecifiedTradeSettlementPaymentMeans>
+        <ram:TypeCode>58</ram:TypeCode>
+        <ram:PayeePartyCreditorFinancialAccount><ram:IBANID>${escXml(ent.iban.replace(/\s/g,""))}</ram:IBANID></ram:PayeePartyCreditorFinancialAccount>
+      </ram:SpecifiedTradeSettlementPaymentMeans>` : ""}
+${taxes}
+      <ram:SpecifiedTradePaymentTerms>
+        <ram:Description>Pénalités de retard : ${escXml(ent.penalites)}${client?.type === "pro" ? " ; indemnité forfaitaire de recouvrement : 40 EUR" : ""}</ram:Description>
+        <ram:DueDateDateTime><udt:DateTimeString format="102">${d(doc.echeance)}</udt:DateTimeString></ram:DueDateDateTime>
+      </ram:SpecifiedTradePaymentTerms>
+      <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+        <ram:LineTotalAmount>${t.ht.toFixed(2)}</ram:LineTotalAmount>
+        <ram:TaxBasisTotalAmount>${t.ht.toFixed(2)}</ram:TaxBasisTotalAmount>
+        <ram:TaxTotalAmount currencyID="EUR">${t.tva.toFixed(2)}</ram:TaxTotalAmount>
+        <ram:GrandTotalAmount>${t.ttc.toFixed(2)}</ram:GrandTotalAmount>
+        <ram:DuePayableAmount>${t.ttc.toFixed(2)}</ram:DuePayableAmount>
+      </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+    </ram:ApplicableHeaderTradeSettlement>
+  </rsm:SupplyChainTradeTransaction>
+</rsm:CrossIndustryInvoice>
+`;
+    }
+
+    function nextNumero(docs, type, dateISO) {
+      const prefix = `${type === "facture" ? "F" : "D"}-${dateISO.slice(0,4)}-`;
+      const max = docs.filter(d => d.numero?.startsWith(prefix)).reduce((m, d) => Math.max(m, Number(d.numero.slice(prefix.length)) || 0), 0);
+      return prefix + String(max + 1).padStart(4, "0");
+    }
+
+    function EntrepriseForm({ ent, setEnt, profile }) {
+      const f = (k) => ({ value: ent[k], onChange: v => setEnt({ ...ent, [k]: v }) });
+      return (
+        <Card>
+          <div style={{ fontSize:"14px", marginBottom:"4px" }}>🏢 Mon entreprise</div>
+          <div style={{ fontSize:"11.5px", color:C.textFaint, marginBottom:"14px" }}>Ces informations apparaissent sur tous tes devis et factures.</div>
+          <Field label="Nom et prénom + « EI » (obligatoire)"><Input {...f("nom")} placeholder="ex : Camille MARTIN EI" /></Field>
+          {ent.nom && !/\bEI\b|Entrepreneur individuel/i.test(ent.nom) && (
+            <div style={{ fontSize:"11px", color:C.accent3, margin:"-6px 0 12px" }}>⚠️ Ajoute « EI » : <button onClick={() => setEnt({ ...ent, nom: ent.nom.trim() + " EI" })} style={{ background:"transparent", border:"none", color:C.accent, cursor:"pointer", textDecoration:"underline", fontSize:"11px" }}>corriger automatiquement</button></div>
+          )}
+          <Field label="Nom commercial (facultatif)"><Input {...f("nomCommercial")} /></Field>
+          <Field label="Adresse"><Input {...f("adresse")} /></Field>
+          <div style={{ display:"flex", gap:"10px" }}>
+            <Field label="Code postal" style={{ flex:"0 0 110px" }}><Input {...f("cp")} inputMode="numeric" /></Field>
+            <Field label="Ville" style={{ flex:1 }}><Input {...f("ville")} /></Field>
+          </div>
+          <Field label="SIRET (14 chiffres)"><Input value={ent.siret} onChange={v => setEnt({ ...ent, siret: v.replace(/[^0-9]/g,"").slice(0,14) })} inputMode="numeric" placeholder={profile.siret || ""} /></Field>
+          <div style={{ display:"flex", gap:"10px", flexWrap:"wrap" }}>
+            <Field label="E-mail" style={{ flex:1, minWidth:"180px" }}><Input {...f("email")} type="email" /></Field>
+            <Field label="Téléphone" style={{ flex:1, minWidth:"140px" }}><Input {...f("tel")} /></Field>
+          </div>
+          <div style={{ display:"flex", gap:"10px", flexWrap:"wrap" }}>
+            <Field label="IBAN" style={{ flex:2, minWidth:"200px" }}><Input {...f("iban")} /></Field>
+            <Field label="BIC" style={{ flex:1, minWidth:"110px" }}><Input {...f("bic")} /></Field>
+          </div>
+          {profile.ue && <Field label="N° TVA intracommunautaire"><Input {...f("tvaIntra")} placeholder="FR…" /></Field>}
+          <Field label={`Assurance pro (assureur, n° contrat, couverture)${profile.batiment || profile.activite === "cipav" ? " — obligatoire" : ""}`}><Input {...f("assurance")} placeholder="ex : Décennale XYZ Assurances n°123, couverture France" /></Field>
+          {isB2C(profile) && <Field label="Médiateur de la consommation (nom, site) — obligatoire B2C"><Input {...f("mediateur")} /></Field>}
+          <div style={{ display:"flex", gap:"10px", flexWrap:"wrap" }}>
+            <Field label="Taux des pénalités de retard" style={{ flex:2, minWidth:"200px" }}><Input {...f("penalites")} /></Field>
+            <Field label="Délai de paiement (jours)" style={{ flex:1, minWidth:"120px" }}><Input value={ent.delai} onChange={v => setEnt({ ...ent, delai: v.replace(/[^0-9]/g,"") })} inputMode="numeric" /></Field>
+          </div>
+          <div style={{ fontSize:"11px", color:C.textFaint }}>Délai légal maximal entre professionnels : 60 jours date de facture (ou 45 jours fin de mois).</div>
+        </Card>
+      );
+    }
+
+    function ClientsPanel({ clients, setClients }) {
+      const [edit, setEdit] = useState(null);
+      const save = () => {
+        const exists = clients.some(c => c.id === edit.id);
+        setClients(exists ? clients.map(c => c.id === edit.id ? edit : c) : [...clients, edit]);
+        setEdit(null);
+      };
+      const f = (k) => ({ value: edit[k], onChange: v => setEdit({ ...edit, [k]: v }) });
+      return (
+        <Card>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px" }}>
+            <div style={{ fontSize:"14px" }}>👥 Mes clients</div>
+            <Btn kind="accent" onClick={() => setEdit({ id:uid(), type:"pro", nom:"", adresse:"", cp:"", ville:"", pays:"France", siren:"", email:"", tvaIntra:"" })}>+ Client</Btn>
+          </div>
+          {clients.length === 0 && <div style={{ fontSize:"12px", color:C.textFaint, fontStyle:"italic" }}>Aucun client pour l'instant.</div>}
+          {clients.map(c => (
+            <div key={c.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderTop:`1px solid ${C.cardBorder}`, gap:"10px" }}>
+              <div style={{ fontSize:"13px" }}>
+                {c.nom} <span style={{ fontSize:"11px", color:C.textFaint }}>· {c.type === "pro" ? "pro" : "particulier"}{c.ville ? ` · ${c.ville}` : ""}</span>
+                {c.type === "pro" && !/^\d{9}$/.test((c.siren||"").replace(/\s/g,"")) && <div style={{ fontSize:"11px", color:C.accent3 }}>⚠️ SIREN manquant (obligatoire sur les factures)</div>}
+              </div>
+              <div style={{ display:"flex", gap:"6px" }}>
+                <Btn onClick={() => setEdit(c)} style={{ padding:"6px 10px" }}>Modifier</Btn>
+              </div>
+            </div>
+          ))}
+          {edit && (
+            <Modal onClose={() => setEdit(null)}>
+              <div style={{ fontSize:"14px", color:C.accent, marginBottom:"12px" }}>Client</div>
+              <div style={{ marginBottom:"12px" }}><Pills options={["pro","particulier"]} value={edit.type} onChange={v => setEdit({ ...edit, type:v })} /></div>
+              <Field label={edit.type === "pro" ? "Raison sociale" : "Nom et prénom"}><Input {...f("nom")} /></Field>
+              {edit.type === "pro" && <Field label="SIREN (9 chiffres) — obligatoire"><Input value={edit.siren} onChange={v => setEdit({ ...edit, siren: v.replace(/[^0-9]/g,"").slice(0,9) })} inputMode="numeric" /></Field>}
+              {edit.type === "pro" && <div style={{ fontSize:"11px", color:C.textFaint, margin:"-6px 0 12px" }}>Trouve-le sur <a href="https://annuaire-entreprises.data.gouv.fr" target="_blank" rel="noopener" style={{ color:C.accent }}>annuaire-entreprises.data.gouv.fr</a></div>}
+              <Field label="Adresse de facturation"><Input {...f("adresse")} /></Field>
+              <div style={{ display:"flex", gap:"10px" }}>
+                <Field label="Code postal" style={{ flex:"0 0 110px" }}><Input {...f("cp")} /></Field>
+                <Field label="Ville" style={{ flex:1 }}><Input {...f("ville")} /></Field>
+              </div>
+              <Field label="Pays"><Input {...f("pays")} /></Field>
+              <Field label="E-mail"><Input {...f("email")} /></Field>
+              {edit.type === "pro" && <Field label="N° TVA intracommunautaire (si UE)"><Input {...f("tvaIntra")} /></Field>}
+              <div style={{ display:"flex", gap:"8px" }}>
+                <Btn kind="primary" onClick={save} disabled={!edit.nom.trim()} style={{ flex:1 }}>Enregistrer</Btn>
+                {clients.some(c => c.id === edit.id) && <Btn kind="danger" onClick={() => { if (confirm("Supprimer ce client ?")) { setClients(clients.filter(c => c.id !== edit.id)); setEdit(null); } }}>Supprimer</Btn>}
+              </div>
+            </Modal>
+          )}
+        </Card>
+      );
+    }
+
+    function DocEditor({ doc, setDoc, onClose, onEmit, onPaid, onDelete, onConvert, ent, clients, profile }) {
+      const client = clients.find(c => c.id === doc.clientId);
+      const locked = !!doc.numero && doc.type === "facture";
+      const [preview, setPreview] = useState(false);
+      const [paid, setPaid] = useState({ date: todayISO(), mode:"Virement" });
+      const checks = conformite(doc, ent, client, profile);
+      const ko = checks.filter(c => !c.ok);
+      const t = docTotals(doc, profile);
+      const setLine = (i, k, v) => setDoc({ ...doc, lignes: doc.lignes.map((l,j) => j === i ? { ...l, [k]: v } : l) });
+      const franchise = profile.tva !== "assujetti";
+
+      return (
+        <Modal onClose={onClose} wide>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"14px" }}>
+            <div style={{ fontSize:"15px", color:C.accent }}>{doc.type === "facture" ? "🧾 Facture" : "📋 Devis"} {doc.numero || "(brouillon)"}</div>
+            <Btn onClick={onClose} style={{ padding:"6px 10px" }}>✕</Btn>
+          </div>
+          {locked && <div style={{ fontSize:"11.5px", color:C.accent3, background:"rgba(251,191,36,0.08)", border:"1px solid rgba(251,191,36,0.3)", borderRadius:"10px", padding:"9px 12px", marginBottom:"12px" }}>🔒 Facture émise : elle ne peut plus être modifiée ni supprimée. Pour la corriger ou l'annuler, émets une facture d'avoir.</div>}
+
+          <fieldset disabled={locked} style={{ border:"none" }}>
+            <div style={{ display:"flex", gap:"10px", flexWrap:"wrap" }}>
+              <Field label="Client" style={{ flex:2, minWidth:"200px" }}>
+                <Select value={doc.clientId} onChange={v => setDoc({ ...doc, clientId:v })} options={[{ value:"", label:"— Choisir —" }, ...clients.map(c => ({ value:c.id, label:c.nom }))]} />
+              </Field>
+              <Field label="Date du document" style={{ flex:1, minWidth:"140px" }}>
+                <input type="date" value={doc.date} onChange={e => setDoc({ ...doc, date:e.target.value })} style={{ ...inputStyle, colorScheme:"dark" }} />
+              </Field>
+            </div>
+            {clients.length === 0 && <div style={{ fontSize:"11.5px", color:C.accent3, margin:"-6px 0 12px" }}>Ajoute d'abord un client dans « Clients ».</div>}
+            <Field label="Objet (facultatif)"><Input value={doc.objet} onChange={v => setDoc({ ...doc, objet:v })} /></Field>
+
+            <SLabel>Lignes</SLabel>
+            {doc.lignes.map((l,i) => (
+              <div key={i} style={{ background:"rgba(255,255,255,0.03)", border:`1px solid ${C.cardBorder}`, borderRadius:"10px", padding:"10px", marginBottom:"8px" }}>
+                <input value={l.designation} onChange={e => setLine(i,"designation",e.target.value)} placeholder="Désignation précise" style={{ ...inputStyle, marginBottom:"8px" }} />
+                <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
+                  <input value={l.qte} onChange={e => setLine(i,"qte",e.target.value.replace(",","."))} placeholder="Qté" inputMode="decimal" style={{ ...inputStyle, width:"70px" }} />
+                  <input value={l.unite || ""} onChange={e => setLine(i,"unite",e.target.value)} placeholder="unité" style={{ ...inputStyle, width:"80px" }} />
+                  <input value={l.pu} onChange={e => setLine(i,"pu",e.target.value.replace(",","."))} placeholder="PU HT €" inputMode="decimal" style={{ ...inputStyle, width:"100px" }} />
+                  {!franchise && <select value={l.tva ?? 20} onChange={e => setLine(i,"tva",Number(e.target.value))} style={{ ...inputStyle, width:"80px" }}>{[20,10,5.5,2.1,0].map(r => <option key={r} value={r}>{r} %</option>)}</select>}
+                  <select value={l.nature || "service"} onChange={e => setLine(i,"nature",e.target.value)} style={{ ...inputStyle, width:"110px" }}>
+                    <option value="service">Service</option><option value="bien">Bien</option>
+                  </select>
+                  <span style={{ marginLeft:"auto", fontSize:"13px", color:C.textDim }}>{eur((Number(l.qte)||0)*(Number(l.pu)||0))}</span>
+                  {doc.lignes.length > 1 && <button onClick={() => setDoc({ ...doc, lignes: doc.lignes.filter((_,j)=>j!==i) })} style={{ background:"transparent", border:"none", color:C.danger, cursor:"pointer", fontSize:"16px" }}>×</button>}
+                </div>
+              </div>
+            ))}
+            <Btn onClick={() => setDoc({ ...doc, lignes:[...doc.lignes, { designation:"", qte:1, pu:"", nature: profile.activite === "vente" ? "bien" : "service" }] })} style={{ marginBottom:"14px" }}>+ Ligne</Btn>
+
+            <div style={{ display:"flex", gap:"10px", flexWrap:"wrap" }}>
+              <Field label="Date de la vente / prestation" style={{ flex:1, minWidth:"150px" }}>
+                <input type="date" value={doc.dateOperation} onChange={e => setDoc({ ...doc, dateOperation:e.target.value })} style={{ ...inputStyle, colorScheme:"dark" }} />
+              </Field>
+              {doc.type === "facture" ? (
+                <Field label="Échéance de paiement" style={{ flex:1, minWidth:"150px" }}>
+                  <input type="date" value={doc.echeance} onChange={e => setDoc({ ...doc, echeance:e.target.value })} style={{ ...inputStyle, colorScheme:"dark" }} />
+                </Field>
+              ) : (
+                <Field label="Devis valable jusqu'au" style={{ flex:1, minWidth:"150px" }}>
+                  <input type="date" value={doc.validite} onChange={e => setDoc({ ...doc, validite:e.target.value })} style={{ ...inputStyle, colorScheme:"dark" }} />
+                </Field>
+              )}
+            </div>
+            <Field label="Adresse de livraison (si différente de l'adresse de facturation)"><Input value={doc.adresseLivraison} onChange={v => setDoc({ ...doc, adresseLivraison:v })} /></Field>
+            <Field label="Notes / conditions particulières"><Input value={doc.notes} onChange={v => setDoc({ ...doc, notes:v })} /></Field>
+          </fieldset>
+
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:"15px", margin:"6px 0 14px" }}>
+            <span style={{ color:C.textDim }}>{franchise ? "Total (TVA non applicable)" : `Total HT ${eur(t.ht)} · TVA ${eur(t.tva)} · TTC`}</span>
+            <strong style={{ color:C.accent }}>{eur(t.ttc)}</strong>
+          </div>
+
+          <div style={{ background: ko.length ? "rgba(251,191,36,0.07)" : "rgba(52,211,153,0.07)", border:`1px solid ${ko.length ? "rgba(251,191,36,0.3)" : "rgba(52,211,153,0.3)"}`, borderRadius:"12px", padding:"12px", marginBottom:"14px" }}>
+            <div style={{ fontSize:"12.5px", marginBottom:"6px", color: ko.length ? C.accent3 : C.accent }}>
+              {ko.length ? `⚠️ ${ko.length} mention(s) obligatoire(s) à compléter (${REGLES.penaliteMention} € d'amende par mention manquante)` : "✓ Toutes les mentions obligatoires sont présentes"}
+            </div>
+            {ko.map((c,i) => <div key={i} style={{ fontSize:"11.5px", color:C.textDim }}>• {c.label} <span style={{ color:C.textFaint }}>→ {c.where}</span></div>)}
+          </div>
+
+          <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
+            <Btn onClick={() => setPreview(true)}>👁 Aperçu / PDF</Btn>
+            {!doc.numero && <Btn kind="primary" disabled={ko.length > 0} onClick={onEmit}>{doc.type === "facture" ? "Valider et émettre la facture" : "Valider le devis"}</Btn>}
+            {doc.type === "facture" && doc.numero && <Btn kind="accent" onClick={() => downloadFile(`${doc.numero}.xml`, buildCII(doc, ent, client, profile), "application/xml")}>⬇ XML CII (EN 16931)</Btn>}
+            {doc.type === "devis" && doc.numero && <Btn kind="gold" onClick={onConvert}>→ Transformer en facture</Btn>}
+            {(!locked) && <Btn kind="danger" onClick={onDelete} style={{ marginLeft:"auto" }}>Supprimer</Btn>}
+          </div>
+
+          {doc.type === "facture" && doc.numero && (
+            <div style={{ marginTop:"14px", borderTop:`1px solid ${C.cardBorder}`, paddingTop:"14px" }}>
+              {doc.payeLe ? (
+                <div style={{ fontSize:"12.5px", color:C.accent }}>✓ Payée le {fmtDate(doc.payeLe)} ({doc.modePaiement}) — inscrite au livre des recettes.</div>
+              ) : (
+                <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
+                  <span style={{ fontSize:"12px", color:C.textDim }}>Encaissement :</span>
+                  <input type="date" value={paid.date} onChange={e => setPaid({ ...paid, date:e.target.value })} style={{ ...inputStyle, width:"150px", colorScheme:"dark" }} />
+                  <select value={paid.mode} onChange={e => setPaid({ ...paid, mode:e.target.value })} style={{ ...inputStyle, width:"130px" }}>
+                    {["Virement","Carte","Chèque","Espèces","Autre"].map(m => <option key={m}>{m}</option>)}
+                  </select>
+                  <Btn kind="accent" onClick={() => onPaid(paid)}>Marquer payée</Btn>
+                </div>
+              )}
+            </div>
+          )}
+
+          {preview && (
+            <div onClick={() => setPreview(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:3000, overflowY:"auto", padding:"16px" }}>
+              <div onClick={e => e.stopPropagation()} style={{ maxWidth:"780px", margin:"0 auto" }}>
+                <div className="no-print" style={{ display:"flex", gap:"8px", marginBottom:"10px" }}>
+                  <Btn kind="primary" onClick={() => window.print()}>🖨 Imprimer / Enregistrer en PDF</Btn>
+                  <Btn onClick={() => setPreview(false)}>Fermer</Btn>
+                </div>
+                <InvoicePaper doc={doc} ent={ent} client={client} p={profile} />
+                {ReactDOM.createPortal(<div id="print-area"><InvoicePaper doc={doc} ent={ent} client={client} p={profile} /></div>, document.body)}
+                <div className="no-print" style={{ fontSize:"11px", color:C.textFaint, marginTop:"8px" }}>
+                  Rappel : à partir du {fmtDate(REGLES.facturationElec.emission)}, les factures B2B devront transiter par ta plateforme agréée en format structuré (le PDF seul ne suffira plus).
+                </div>
+              </div>
+            </div>
+          )}
+        </Modal>
+      );
+    }
+
+    function ReformePanel({ store, patch }) {
+      const done = store.steps || {};
+      const jours = daysBetween(todayISO(), REGLES.facturationElec.emission);
+      const items = [
+        { id:"f_pa", label:"J'ai choisi ma plateforme agréée et je peux recevoir des factures", urgent:true },
+        { id:"f_annuaire", label:"Je suis inscrit(e) dans l'annuaire de facturation" },
+        { id:"f_mentions", label:"Mes modèles intègrent les nouvelles mentions (SIREN client, nature, livraison)" },
+        { id:"f_emission", label:"J'ai testé l'émission d'une facture électronique" },
+      ];
+      const score = items.filter(i => done[i.id]).length;
+      return (
+        <Card style={{ borderColor:"rgba(251,191,36,0.35)" }}>
+          <div style={{ fontSize:"14px", marginBottom:"6px" }}>⚡ Réforme de la facture électronique</div>
+          <div style={{ display:"flex", gap:"10px", marginBottom:"12px", flexWrap:"wrap" }}>
+            <div style={{ flex:1, minWidth:"140px", background:"rgba(52,211,153,0.07)", borderRadius:"10px", padding:"10px" }}>
+              <div style={{ fontSize:"10px", color:C.textFaint, letterSpacing:"1.5px", textTransform:"uppercase" }}>Réception</div>
+              <div style={{ fontSize:"13px", color:C.accent }}>Obligatoire depuis le {fmtDate(REGLES.facturationElec.reception)}</div>
+            </div>
+            <div style={{ flex:1, minWidth:"140px", background:"rgba(251,191,36,0.07)", borderRadius:"10px", padding:"10px" }}>
+              <div style={{ fontSize:"10px", color:C.textFaint, letterSpacing:"1.5px", textTransform:"uppercase" }}>Émission + e-reporting</div>
+              <div style={{ fontSize:"13px", color:C.accent3 }}>{fmtDate(REGLES.facturationElec.emission)} · J-{Math.max(0,jours)}</div>
+            </div>
+          </div>
+          <div style={{ fontSize:"12px", color:C.textDim, marginBottom:"8px" }}>Ton niveau de préparation : <strong style={{ color: score === items.length ? C.accent : C.accent3 }}>{score}/{items.length}</strong></div>
+          {items.map(i => <Toggle key={i.id} value={!!done[i.id]} onChange={v => patch({ steps: { ...done, [i.id]: v } })} label={(i.urgent && !done[i.id] ? "🔴 " : "") + i.label} />)}
+          <a href="https://www.impots.gouv.fr/facturation-electronique-et-plateformes-agreees" target="_blank" rel="noopener" style={{ fontSize:"12px", color:C.accent }}>🔗 Liste officielle des plateformes agréées</a>
+        </Card>
+      );
+    }
+
+    function FacturesTab({ profile, store, patch, askAdvisor }) {
+      const [view, setView] = useState("docs");
+      const [editing, setEditing] = useState(null);
+      const ent = { ...EMPTY_ENT, siret: profile.siret || "", ...(store.entreprise || {}) };
+      const clients = store.clients || [];
+      const docs = store.docs || [];
+
+      const newDoc = (type) => {
+        const date = todayISO();
+        setEditing({ id:uid(), type, numero:"", date, clientId: clients[0]?.id || "", objet:"",
+          lignes:[{ designation:"", qte:1, pu:"", nature: profile.activite === "vente" ? "bien" : "service" }],
+          dateOperation: date, echeance: addDays(date, Number(ent.delai) || 30), validite: addDays(date, 30), adresseLivraison:"", notes:"" });
+      };
+
+      const saveDoc = (d) => {
+        const exists = docs.some(x => x.id === d.id);
+        patch({ docs: exists ? docs.map(x => x.id === d.id ? d : x) : [...docs, d] });
+      };
+      const setDoc = (d) => { setEditing(d); if (!(d.numero && d.type === "facture" && docs.find(x => x.id === d.id)?.numero)) saveDoc(d); };
+
+      const emit = () => {
+        const d = { ...editing, numero: nextNumero(docs, editing.type, editing.date) };
+        setEditing(d); saveDoc(d);
+      };
+      const markPaid = ({ date, mode }) => {
+        const client = clients.find(c => c.id === editing.clientId);
+        const d = { ...editing, payeLe: date, modePaiement: mode };
+        const t = docTotals(d, profile);
+        setEditing(d);
+        patch({
+          docs: docs.map(x => x.id === d.id ? d : x),
+          recettes: [...(store.recettes || []), { id:uid(), date, client: client?.nom || "", nature: d.objet || natureOperation(d), montant: t.ttc, mode, ref: d.numero }],
+        });
+      };
+      const del = () => {
+        if (!confirm("Supprimer ce document ?")) return;
+        patch({ docs: docs.filter(x => x.id !== editing.id) }); setEditing(null);
+      };
+      const convert = () => {
+        const date = todayISO();
+        const f = { ...editing, id:uid(), type:"facture", numero:"", date, echeance: addDays(date, Number(ent.delai) || 30), devisRef: editing.numero, notes: [editing.notes, `Suivant devis n° ${editing.numero}`].filter(Boolean).join(" — ") };
+        saveDoc(f); setEditing(f);
+      };
+
+      const impayes = docs.filter(d => d.type === "facture" && d.numero && !d.payeLe);
+      const enRetard = impayes.filter(d => d.echeance < todayISO());
+
+      const tabs = [["docs","🧾 Documents"],["ent","🏢 Mon entreprise"],["clients","👥 Clients"],["reforme","⚡ Réforme"]];
+      return (
+        <div>
+          <div style={{ display:"flex", gap:"6px", marginBottom:"14px", overflowX:"auto" }}>
+            {tabs.map(([id, label]) => (
+              <button key={id} onClick={() => setView(id)} style={{ flexShrink:0, background: view===id ? "rgba(52,211,153,0.14)" : "rgba(255,255,255,0.04)", border:`1px solid ${view===id ? "rgba(52,211,153,0.45)" : C.cardBorder}`, borderRadius:"20px", padding:"8px 13px", color: view===id ? C.accent : C.textDim, fontSize:"12px", cursor:"pointer" }}>{label}</button>
+            ))}
+          </div>
+
+          {view === "docs" && (
+            <>
+              <div style={{ display:"flex", gap:"8px", marginBottom:"14px" }}>
+                <Btn kind="primary" onClick={() => newDoc("facture")} style={{ flex:1 }}>+ Facture</Btn>
+                <Btn kind="accent" onClick={() => newDoc("devis")} style={{ flex:1 }}>+ Devis</Btn>
+              </div>
+              {enRetard.length > 0 && (
+                <Card style={{ borderColor:"rgba(251,113,133,0.4)" }}>
+                  <div style={{ fontSize:"13px", color:C.danger, marginBottom:"8px" }}>⏰ {enRetard.length} facture(s) en retard de paiement — {eur(enRetard.reduce((s,d) => s + docTotals(d, profile).ttc, 0))}</div>
+                  <Btn kind="gold" onClick={() => askAdvisor(`Rédige-moi un e-mail de relance courtois mais ferme pour ces factures impayées : ${enRetard.map(d => `${d.numero} (${clients.find(c=>c.id===d.clientId)?.nom}, ${eur(docTotals(d, profile).ttc)}, échue le ${fmtDate(d.echeance)})`).join(" ; ")}. Rappelle les pénalités applicables et, pour les pros, l'indemnité de 40 €.`)}>💬 Préparer les relances</Btn>
+                </Card>
+              )}
+              {docs.length === 0 && <Card><div style={{ fontSize:"12.5px", color:C.textDim, lineHeight:"1.7" }}>Aucun document. Commence par compléter <strong>Mon entreprise</strong> et ajouter un <strong>client</strong>, puis crée ton premier devis ou ta première facture : Cap Micro vérifie automatiquement toutes les mentions obligatoires.</div></Card>}
+              {[...docs].sort((a,b) => (b.date || "").localeCompare(a.date || "")).map(d => {
+                const c = clients.find(x => x.id === d.clientId);
+                const status = d.type === "devis" ? (d.numero ? "validé" : "brouillon") : !d.numero ? "brouillon" : d.payeLe ? "payée" : d.echeance < todayISO() ? "en retard" : "à encaisser";
+                const col = { "payée":C.accent, "en retard":C.danger, "à encaisser":C.accent3, "brouillon":C.textFaint, "validé":C.accent2 }[status];
+                return (
+                  <button key={d.id} onClick={() => setEditing(d)} style={{ width:"100%", textAlign:"left", display:"flex", justifyContent:"space-between", alignItems:"center", gap:"10px", background:C.card, border:`1px solid ${C.cardBorder}`, borderRadius:"12px", padding:"12px 14px", marginBottom:"8px", cursor:"pointer", color:C.text }}>
+                    <div>
+                      <div style={{ fontSize:"13px" }}>{d.type === "facture" ? "🧾" : "📋"} {d.numero || "Brouillon"} · {c?.nom || "—"}</div>
+                      <div style={{ fontSize:"11px", color:C.textFaint }}>{fmtDate(d.date)}{d.objet ? ` · ${d.objet}` : ""}</div>
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:"13px" }}>{eur(docTotals(d, profile).ttc)}</div>
+                      <div style={{ fontSize:"10.5px", color:col }}>{status}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </>
+          )}
+          {view === "ent" && <EntrepriseForm ent={ent} setEnt={e => patch({ entreprise:e })} profile={profile} />}
+          {view === "clients" && <ClientsPanel clients={clients} setClients={cl => patch({ clients:cl })} />}
+          {view === "reforme" && <>
+            <ReformePanel store={store} patch={patch} />
+            <Card>
+              <div style={{ fontSize:"13px", marginBottom:"8px" }}>Ce qu'il faut retenir</div>
+              <ul style={{ margin:"0 0 10px 16px", fontSize:"12px", color:C.textDim, lineHeight:"1.8" }}>
+                <li>Tu es concerné(e) même en franchise de TVA.</li>
+                <li>Le PDF envoyé par e-mail ne sera plus une facture valable en B2B France à partir du {fmtDate(REGLES.facturationElec.emission)}.</li>
+                <li>Formats acceptés : Factur-X (PDF + XML), UBL, CII — Cap Micro exporte déjà tes factures en XML CII.</li>
+                <li>Ventes aux particuliers et à l'étranger : pas de facture électronique mais un e-reporting des montants.</li>
+                <li>Amende de {REGLES.penaliteMention} € par mention manquante ; sanctions supplémentaires en cas de non-recours à la facture électronique.</li>
+              </ul>
+              <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
+                <Btn kind="gold" onClick={() => askAdvisor("Aide-moi à choisir une plateforme agréée adaptée à ma micro-entreprise : quels critères, quelles questions poser, et quel plan d'action d'ici l'obligation d'émission ?")}>💬 Choisir ma plateforme</Btn>
+                <Btn kind="gold" onClick={() => askAdvisor("Rédige un e-mail court et professionnel à envoyer à mes clients professionnels pour leur demander leur SIREN et leur adresse de facturation, en expliquant la réforme de la facture électronique.")}>💬 E-mail « SIREN » pour mes clients</Btn>
+              </div>
+            </Card>
+          </>}
+
+          {editing && <DocEditor doc={editing} setDoc={setDoc} onClose={() => setEditing(null)} onEmit={emit} onPaid={markPaid} onDelete={del} onConvert={convert} ent={ent} clients={clients} profile={profile} />}
+        </div>
+      );
+    }
+
+    // ── ONGLET SUIVI ───────────────────────────────────────────────────────
+
+    function RegistreForm({ onAdd, kind }) {
+      const [r, setR] = useState({ date: todayISO(), client:"", nature:"", montant:"", mode:"Virement", ref:"" });
+      const ok = r.date && Number(r.montant) > 0;
+      return (
+        <div style={{ display:"flex", gap:"6px", flexWrap:"wrap", marginBottom:"10px" }}>
+          <input type="date" value={r.date} onChange={e => setR({ ...r, date:e.target.value })} style={{ ...inputStyle, width:"140px", colorScheme:"dark" }} />
+          <input value={r.client} onChange={e => setR({ ...r, client:e.target.value })} placeholder={kind === "achat" ? "Fournisseur" : "Client"} style={{ ...inputStyle, flex:1, minWidth:"110px" }} />
+          <input value={r.nature} onChange={e => setR({ ...r, nature:e.target.value })} placeholder="Nature" style={{ ...inputStyle, flex:1, minWidth:"110px" }} />
+          <input value={r.montant} onChange={e => setR({ ...r, montant:e.target.value.replace(",",".") })} placeholder="Montant €" inputMode="decimal" style={{ ...inputStyle, width:"100px" }} />
+          <select value={r.mode} onChange={e => setR({ ...r, mode:e.target.value })} style={{ ...inputStyle, width:"110px" }}>{["Virement","Carte","Chèque","Espèces","Autre"].map(m => <option key={m}>{m}</option>)}</select>
+          <Btn kind="accent" disabled={!ok} onClick={() => { onAdd({ ...r, id:uid(), montant: round2(r.montant) }); setR({ ...r, client:"", nature:"", montant:"", ref:"" }); }}>Ajouter</Btn>
+        </div>
+      );
+    }
+
+    function toCSV(rows, cols) {
+      const esc = (v) => `"${String(v ?? "").replace(/"/g,'""')}"`;
+      return "﻿" + [cols.map(c => esc(c[1])).join(";"), ...rows.map(r => cols.map(c => esc(c[0] === "montant" ? String(r.montant).replace(".", ",") : r[c[0]])).join(";"))].join("\n");
+    }
+
+    function SuiviTab({ profile, store, patch, askAdvisor }) {
+      const a = activiteOf(profile);
+      const [annee, setAnnee] = useState(new Date().getFullYear());
+      const [showRegistre, setShowRegistre] = useState(false);
+      const recettes = store.recettes || [];
+      const achats = store.achats || [];
+      const actions = store.actions || [];
+      const s = computeStats(profile, recettes, annee);
+      const prev = computeStats(profile, recettes, annee - 1);
+      const deadlines = upcomingDeadlines(profile);
+      const maxMois = Math.max(...s.parMois, 1);
+      const objectif = Number(store.objectif) || 0;
+      const franchise = profile.tva !== "assujetti";
+      const cols = [["date","Date d'encaissement"],["client","Client"],["nature","Nature"],["montant","Montant (€)"],["mode","Mode de paiement"],["ref","Référence"]];
+
+      const alerts = [];
+      if (franchise && s.ca >= a.tvaMaj) alerts.push({ c:C.danger, t:`Seuil majoré de TVA dépassé (${eur(a.tvaMaj)}) : tu dois facturer la TVA depuis le jour du dépassement. Contacte ton SIE et demande un numéro de TVA.` });
+      else if (franchise && s.ca >= a.tva) alerts.push({ c:C.accent3, t:`Seuil de franchise de TVA dépassé (${eur(a.tva)}) : tu resteras en franchise cette année tant que tu ne dépasses pas ${eur(a.tvaMaj)}, mais tu factureras la TVA à partir du 1er janvier prochain.` });
+      else if (franchise && s.projection >= a.tva) alerts.push({ c:C.accent3, t:`À ce rythme (projection ${eur(s.projection)}), tu dépasseras le seuil de franchise de TVA (${eur(a.tva)}) cette année. Anticipe tes prix TTC.` });
+      if (s.ca >= a.plafond) alerts.push({ c:C.danger, t:`Plafond de la micro-entreprise dépassé (${eur(a.plafond)}). Si c'est le cas 2 années de suite, tu sortiras du régime : prépare la suite avec le Conseiller.` });
+      if (s.ca > REGLES.compteDedieSeuil && prev.ca > REGLES.compteDedieSeuil && !store.steps?.a_banque) alerts.push({ c:C.accent3, t:`CA > ${eur(REGLES.compteDedieSeuil)} deux années de suite : le compte bancaire dédié est obligatoire.` });
+
+      const chiffresPourIA = `CA ${annee} : ${eur(s.ca)} ; cotisations estimées ${eur(s.cotis)} ; projection annuelle ${eur(s.projection)} ; CA ${annee-1} : ${eur(prev.ca)} ; objectif : ${objectif ? eur(objectif) : "non défini"} ; CA par mois : ${s.parMois.map(v => Math.round(v)).join(", ")}`;
+
+      return (
+        <div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px" }}>
+            <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
+              <Btn onClick={() => setAnnee(annee-1)} style={{ padding:"6px 10px" }}>‹</Btn>
+              <span style={{ fontSize:"15px", minWidth:"50px", textAlign:"center" }}>{annee}</span>
+              <Btn onClick={() => setAnnee(annee+1)} style={{ padding:"6px 10px" }}>›</Btn>
+            </div>
+            <Btn kind="gold" onClick={() => askAdvisor(`Fais-moi un bilan de mon activité et un plan de développement concret pour les 3 prochains mois. Mes chiffres : ${chiffresPourIA}. Analyse mon rythme, mes prix au regard des cotisations, mes risques (seuils, dépendance à un client) et propose des actions précises.`)}>💬 Bilan & conseils</Btn>
+          </div>
+
+          {alerts.map((al,i) => <div key={i} style={{ fontSize:"12px", color:al.c, background:"rgba(255,255,255,0.03)", border:`1px solid ${al.c}55`, borderRadius:"10px", padding:"10px 12px", marginBottom:"10px", lineHeight:"1.6" }}>⚠️ {al.t}</div>)}
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"14px" }}>
+            {[
+              ["CA encaissé", eur(s.ca), C.text],
+              ["Cotisations estimées", eur(s.cotis), C.accent3],
+              [profile.vl === "oui" ? "Impôt (versement lib.)" : "Projection annuelle", profile.vl === "oui" ? eur(s.impot) : eur(s.projection), C.accent2],
+              ["Reste après prélèvements", eur(s.net), C.accent],
+            ].map(([l, v, c]) => (
+              <div key={l} style={{ background:C.card, border:`1px solid ${C.cardBorder}`, borderRadius:"14px", padding:"13px" }}>
+                <div style={{ fontSize:"10px", letterSpacing:"1.5px", textTransform:"uppercase", color:C.textFaint, marginBottom:"4px" }}>{l}</div>
+                <div style={{ fontSize:"17px", color:c }}>{v}</div>
+              </div>
+            ))}
+          </div>
+
+          <Card>
+            <div style={{ fontSize:"13px", marginBottom:"12px" }}>📊 Chiffre d'affaires mensuel</div>
+            <div style={{ display:"flex", alignItems:"flex-end", gap:"4px", height:"110px", marginBottom:"6px" }}>
+              {s.parMois.map((v,i) => (
+                <div key={i} title={eur(v)} style={{ flex:1, display:"flex", flexDirection:"column", justifyContent:"flex-end", height:"100%" }}>
+                  <div style={{ height:`${Math.max(v ? 4 : 1, (v / maxMois) * 100)}%`, background: v ? C.grad : "rgba(255,255,255,0.08)", borderRadius:"4px 4px 0 0" }}/>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:"flex", gap:"4px", fontSize:"9.5px", color:C.textFaint }}>
+              {"JFMAMJJASOND".split("").map((m,i) => <div key={i} style={{ flex:1, textAlign:"center" }}>{m}</div>)}
+            </div>
+            <div style={{ fontSize:"11px", color:C.textFaint, marginTop:"10px" }}>
+              Taux appliqués : {a.taux} % de cotisations + {a.cfp} % CFP{profile.vl === "oui" ? ` + ${a.vl} % d'impôt` : ""}{profile.acre === "oui" ? " (ACRE prise en compte sur la 1re période)" : ""}. Estimation indicative.
+            </div>
+          </Card>
+
+          <Card>
+            <div style={{ fontSize:"13px", marginBottom:"12px" }}>🎯 Seuils & objectif</div>
+            {objectif > 0 && <Gauge label="Objectif de CA" value={s.ca} max={objectif} warnAt={2} />}
+            {franchise && <Gauge label="Franchise de TVA" value={s.ca} max={a.tva} note={`Seuil majoré : ${eur(a.tvaMaj)}`} />}
+            <Gauge label="Plafond micro-entreprise" value={s.ca} max={a.plafond} />
+            <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
+              <span style={{ fontSize:"12px", color:C.textDim }}>Objectif annuel :</span>
+              <input value={store.objectif || ""} onChange={e => patch({ objectif: e.target.value.replace(/[^0-9]/g,"") })} placeholder="€" inputMode="numeric" style={{ ...inputStyle, width:"120px" }} />
+            </div>
+          </Card>
+
+          <Card>
+            <div style={{ fontSize:"13px", marginBottom:"10px" }}>📅 Prochaines échéances</div>
+            {deadlines.map((d,i) => {
+              const j = daysBetween(todayISO(), d.date);
+              return (
+                <div key={i} style={{ display:"flex", gap:"10px", padding:"8px 0", borderTop: i ? `1px solid ${C.cardBorder}` : "none", fontSize:"12.5px" }}>
+                  <div style={{ minWidth:"78px", color: j <= 7 ? C.danger : j <= 30 ? C.accent3 : C.textDim }}>{fmtDate(d.date)}</div>
+                  <div style={{ flex:1, color:C.textDim }}>{d.label}</div>
+                  <div style={{ fontSize:"11px", color:C.textFaint }}>J-{j}</div>
+                </div>
+              );
+            })}
+          </Card>
+
+          <Card>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
+              <div style={{ fontSize:"13px" }}>✅ Mes actions</div>
+              <span style={{ fontSize:"11px", color:C.textFaint }}>{actions.filter(x => !x.done).length} en cours</span>
+            </div>
+            {actions.length === 0 && <div style={{ fontSize:"12px", color:C.textFaint, fontStyle:"italic" }}>Le Conseiller ajoutera ici les actions concrètes qu'il te recommande.</div>}
+            {actions.map(x => (
+              <div key={x.id} style={{ display:"flex", gap:"10px", alignItems:"flex-start", padding:"8px 0", borderTop:`1px solid ${C.cardBorder}` }}>
+                <button onClick={() => patch({ actions: actions.map(y => y.id === x.id ? { ...y, done:!y.done } : y) })} style={{ width:"20px", height:"20px", borderRadius:"6px", flexShrink:0, cursor:"pointer", background: x.done ? C.accent : "transparent", border:`1.5px solid ${x.done ? C.accent : C.textFaint}`, color:"#0b1220", fontSize:"12px" }}>{x.done ? "✓" : ""}</button>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:"12.5px", color: x.done ? C.textFaint : C.text, textDecoration: x.done ? "line-through" : "none" }}>{x.titre}{x.echeance ? <span style={{ fontSize:"11px", color:C.accent3 }}> · {fmtDate(x.echeance)}</span> : null}</div>
+                  {x.detail && !x.done && <div style={{ fontSize:"11.5px", color:C.textFaint, lineHeight:"1.6" }}>{x.detail}</div>}
+                </div>
+                <button onClick={() => patch({ actions: actions.filter(y => y.id !== x.id) })} style={{ background:"transparent", border:"none", color:C.textFaint, cursor:"pointer" }}>×</button>
+              </div>
+            ))}
+          </Card>
+
+          <Card>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px", gap:"8px", flexWrap:"wrap" }}>
+              <div style={{ fontSize:"13px" }}>📒 Livre des recettes ({s.nb} en {annee})</div>
+              <div style={{ display:"flex", gap:"6px" }}>
+                <Btn onClick={() => setShowRegistre(!showRegistre)} style={{ padding:"6px 10px" }}>{showRegistre ? "Masquer" : "Afficher / ajouter"}</Btn>
+                <Btn kind="accent" onClick={() => downloadFile(`livre-des-recettes-${annee}.csv`, toCSV(recettes.filter(r => r.date.startsWith(String(annee))).sort((x,y) => x.date.localeCompare(y.date)), cols), "text/csv;charset=utf-8")} style={{ padding:"6px 10px" }}>⬇ CSV</Btn>
+              </div>
+            </div>
+            <div style={{ fontSize:"11px", color:C.textFaint, marginBottom:"8px" }}>Alimenté automatiquement quand tu marques une facture payée. Ajoute ici les encaissements sans facture (ventes aux particuliers, etc.).</div>
+            {showRegistre && <>
+              <RegistreForm onAdd={r => patch({ recettes:[...recettes, r] })} />
+              {recettes.filter(r => r.date.startsWith(String(annee))).sort((x,y) => y.date.localeCompare(x.date)).map(r => (
+                <div key={r.id} style={{ display:"flex", gap:"8px", fontSize:"12px", padding:"6px 0", borderTop:`1px solid ${C.cardBorder}`, alignItems:"center" }}>
+                  <span style={{ minWidth:"76px", color:C.textFaint }}>{fmtDate(r.date)}</span>
+                  <span style={{ flex:1, color:C.textDim }}>{r.client}{r.nature ? ` — ${r.nature}` : ""}{r.ref ? ` (${r.ref})` : ""}</span>
+                  <span>{eur(r.montant)}</span>
+                  <button onClick={() => confirm("Supprimer cette recette ?") && patch({ recettes: recettes.filter(x => x.id !== r.id) })} style={{ background:"transparent", border:"none", color:C.textFaint, cursor:"pointer" }}>×</button>
+                </div>
+              ))}
+            </>}
+          </Card>
+
+          {profile.activite === "vente" && (
+            <Card>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
+                <div style={{ fontSize:"13px" }}>🛒 Registre des achats</div>
+                <Btn kind="accent" onClick={() => downloadFile(`registre-des-achats-${annee}.csv`, toCSV(achats.filter(r => r.date.startsWith(String(annee))), [["date","Date"],["client","Fournisseur"],["nature","Nature"],["montant","Montant (€)"],["mode","Mode de paiement"]]), "text/csv;charset=utf-8")} style={{ padding:"6px 10px" }}>⬇ CSV</Btn>
+              </div>
+              <RegistreForm kind="achat" onAdd={r => patch({ achats:[...achats, r] })} />
+              {achats.filter(r => r.date.startsWith(String(annee))).sort((x,y) => y.date.localeCompare(x.date)).map(r => (
+                <div key={r.id} style={{ display:"flex", gap:"8px", fontSize:"12px", padding:"6px 0", borderTop:`1px solid ${C.cardBorder}` }}>
+                  <span style={{ minWidth:"76px", color:C.textFaint }}>{fmtDate(r.date)}</span>
+                  <span style={{ flex:1, color:C.textDim }}>{r.client}{r.nature ? ` — ${r.nature}` : ""}</span>
+                  <span>{eur(r.montant)}</span>
+                  <button onClick={() => patch({ achats: achats.filter(x => x.id !== r.id) })} style={{ background:"transparent", border:"none", color:C.textFaint, cursor:"pointer" }}>×</button>
+                </div>
+              ))}
+            </Card>
+          )}
+        </div>
+      );
+    }
+
+    // ── ONGLET CONSEILLER ──────────────────────────────────────────────────
+
+    function renderInline(text) {
+      // **gras** et liens https://
+      const parts = text.split(/(\*\*[^*]+\*\*|https?:\/\/[^\s)]+)/g);
+      return parts.map((part, i) => {
+        if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={i} style={{ color:C.text }}>{part.slice(2,-2)}</strong>;
+        if (/^https?:\/\//.test(part)) return <a key={i} href={part} target="_blank" rel="noopener" style={{ color:C.accent, wordBreak:"break-all" }}>{part}</a>;
+        return <React.Fragment key={i}>{part}</React.Fragment>;
+      });
+    }
+
+    function ChatMessage({ msg, onSuggestionClick }) {
+      if (msg.hidden) return null;
+      const isUser = msg.role === "user";
+      if (isUser) {
+        return (
+          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:"12px" }}>
+            <div style={{ background:"rgba(52,211,153,0.13)", border:"1px solid rgba(52,211,153,0.3)", borderRadius:"16px 16px 4px 16px", padding:"10px 14px", maxWidth:"85%", fontSize:"13px", lineHeight:"1.6", whiteSpace:"pre-wrap" }}>{msg.content}</div>
+          </div>
+        );
+      }
+      const { clean: noAct, blocks: acts } = extractBlocks(msg.content, "action");
+      const { clean, blocks: sugg } = extractBlocks(noAct, "suggestions");
+      const suggestions = sugg[0] || [];
+      return (
+        <div style={{ marginBottom:"14px", animation:"fadeIn 0.3s ease" }}>
+          <div style={{ background:C.card, border:`1px solid ${C.cardBorder}`, borderRadius:"16px 16px 16px 4px", padding:"12px 15px", fontSize:"13px", lineHeight:"1.7", color:C.textDim }}>
+            {clean.split("\n").map((line, i) => {
+              if (/^#{1,4}\s/.test(line)) return <div key={i} style={{ color:C.accent3, fontSize:"13.5px", margin:"8px 0 4px" }}>{renderInline(line.replace(/^#+\s/, ""))}</div>;
+              if (/^\s*[-•*]\s/.test(line)) return <div key={i} style={{ paddingLeft:"14px", position:"relative" }}><span style={{ position:"absolute", left:0, color:C.accent }}>•</span>{renderInline(line.replace(/^\s*[-•*]\s/, ""))}</div>;
+              if (!line.trim()) return <div key={i} style={{ height:"8px" }}/>;
+              return <div key={i}>{renderInline(line)}</div>;
+            })}
+          </div>
+          {acts.length > 0 && (
+            <div style={{ marginTop:"8px" }}>
+              {acts.map((a,i) => (
+                <div key={i} style={{ fontSize:"12px", background:"rgba(251,191,36,0.07)", border:"1px solid rgba(251,191,36,0.3)", borderRadius:"10px", padding:"8px 12px", marginBottom:"6px", color:C.textDim }}>
+                  <span style={{ color:C.accent3 }}>✅ Ajouté à mes actions :</span> {a.titre}{a.echeance ? ` (avant le ${fmtDate(a.echeance)})` : ""}
+                </div>
+              ))}
+            </div>
+          )}
+          {suggestions.length > 0 && (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:"6px", marginTop:"8px" }}>
+              {suggestions.map((s,i) => <button key={i} onClick={() => onSuggestionClick(s)} style={{ background:"rgba(129,140,248,0.1)", border:"1px solid rgba(129,140,248,0.35)", borderRadius:"16px", padding:"6px 12px", color:C.accent2, fontSize:"12px", cursor:"pointer" }}>{s}</button>)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const STARTERS = [
+      "Quelle est la prochaine démarche la plus urgente pour moi ?",
+      "Comment fixer mes prix en tenant compte des cotisations ?",
+      "Explique-moi simplement la facture électronique pour ma situation",
+      "Rédige mes conditions générales de vente",
+      "Versement libératoire : est-ce intéressant pour moi ?",
+      "Comment trouver mes premiers clients ?",
+    ];
+
+    function ConseillerTab({ profile, store, patch, pending, clearPending, onNeedKey, hasKey }) {
+      const [input, setInput] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState("");
+      const endRef = useRef(null);
+      const messages = store.messages || [];
+      const setMessages = (m) => patch({ messages: m });
+
+      const ctx = useMemo(() => {
+        const steps = buildChecklist(profile);
+        const done = store.steps || {};
+        const todo = steps.filter(s => !done[s.id]);
+        const s = computeStats(profile, store.recettes || [], new Date().getFullYear());
+        return {
+          avancement: `${steps.length - todo.length}/${steps.length} étapes faites. Restant à faire : ${todo.map(t => `${t.titre}${t.obligatoire ? " [obligatoire]" : ""}`).join(" ; ") || "rien"}`,
+          chiffres: `CA encaissé ${eur(s.ca)} (${s.nb} encaissements) ; cotisations estimées ${eur(s.cotis)} ; projection annuelle ${eur(s.projection)} ; factures impayées : ${(store.docs || []).filter(d => d.type === "facture" && d.numero && !d.payeLe).length} ; objectif : ${store.objectif ? eur(store.objectif) : "non défini"}`,
+          actions: (store.actions || []).filter(a => !a.done).map(a => `- ${a.titre}`).join("\n") || "aucune",
+        };
+      }, [profile, store.steps, store.recettes, store.docs, store.actions, store.objectif]);
+
+      useEffect(() => { endRef.current?.scrollIntoView({ behavior:"smooth" }); }, [messages.length, loading]);
+
+      const send = useCallback(async (text) => {
+        if (!text.trim() || loading) return;
+        if (!localStorage.getItem(KEY_STORAGE)) { setInput(text); onNeedKey(); return; }
+        const next = [...messages, { role:"user", content:text.trim() }];
+        setMessages(next); setInput(""); setLoading(true); setError("");
+        try {
+          const history = next.slice(-20).map(m => ({ role:m.role, content:m.content }));
+          const reply = await callAPI(buildAdvisorSystem(profile, ctx), history, 2000);
+          const { blocks } = extractBlocks(reply, "action");
+          const newActions = blocks.filter(b => b.titre).map(b => ({ id:uid(), titre:b.titre, echeance:b.echeance || "", detail:b.detail || "", done:false }));
+          patch({ messages: [...next, { role:"assistant", content:reply }], ...(newActions.length ? { actions: [...(store.actions || []), ...newActions] } : {}) });
+        } catch(e) {
+          setError(e.message === "NO_KEY" ? "Clé API manquante." : (e.message || "Erreur de connexion."));
+        }
+        setLoading(false);
+      }, [messages, loading, profile, ctx, store.actions, patch, onNeedKey]);
+
+      useEffect(() => {
+        if (pending && !loading) { clearPending(); send(pending); }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [pending]);
+
+      return (
+        <div>
+          {!hasKey && (
+            <Card style={{ borderColor:"rgba(251,191,36,0.35)" }}>
+              <div style={{ fontSize:"13px", color:C.accent3, marginBottom:"6px" }}>🔑 Active le Conseiller IA</div>
+              <div style={{ fontSize:"12px", color:C.textDim, marginBottom:"10px", lineHeight:"1.7" }}>Il répond à tes questions en tenant compte de ton profil, de ton avancement et de tes chiffres, rédige tes courriers, CGV et relances, et te propose des actions concrètes.</div>
+              <Btn kind="gold" onClick={onNeedKey}>Configurer ma clé</Btn>
+            </Card>
+          )}
+          {messages.length === 0 && (
+            <div style={{ marginBottom:"14px" }}>
+              <div style={{ fontSize:"13px", color:C.textDim, marginBottom:"10px", lineHeight:"1.7" }}>
+                Bonjour {profile.prenom} 👋 Je connais ton profil, ta checklist et tes chiffres. Pose-moi n'importe quelle question sur ton auto-entreprise.
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
+                {STARTERS.map(s => <button key={s} onClick={() => send(s)} style={{ textAlign:"left", background:"rgba(129,140,248,0.08)", border:"1px solid rgba(129,140,248,0.3)", borderRadius:"12px", padding:"10px 13px", color:C.accent2, fontSize:"12.5px", cursor:"pointer" }}>{s}</button>)}
+              </div>
+            </div>
+          )}
+          {messages.map((m,i) => <ChatMessage key={i} msg={m} onSuggestionClick={send} />)}
+          {loading && (
+            <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"6px 0" }}>
+              <span style={{ display:"inline-block", animation:"spin 1.4s linear infinite" }}>🚀</span>
+              <span style={{ fontSize:"12px", color:C.textFaint, fontStyle:"italic", animation:"pulse 2s ease infinite" }}>Cap Micro réfléchit…</span>
+            </div>
+          )}
+          {error && <div style={{ background:"rgba(251,113,133,0.1)", border:"1px solid rgba(251,113,133,0.3)", borderRadius:"10px", padding:"11px 14px", fontSize:"12px", color:C.danger, marginBottom:"12px" }}>⚠️ {error}</div>}
+          {messages.length > 0 && <div style={{ textAlign:"center", margin:"4px 0 10px" }}><button onClick={() => confirm("Effacer la conversation ?") && setMessages([])} style={{ background:"transparent", border:"none", color:C.textFaint, fontSize:"11px", cursor:"pointer", fontStyle:"italic" }}>🧹 Nouvelle conversation</button></div>}
+          <div ref={endRef}/>
+
+          <div className="no-print" style={{ position:"fixed", bottom:"calc(env(safe-area-inset-bottom,0px) + 62px)", left:0, right:0, zIndex:10, background:"linear-gradient(0deg,#0b1220 65%,rgba(11,18,32,0))" }}>
+            <div style={{ maxWidth:"680px", margin:"0 auto", padding:"14px 16px 8px", display:"flex", gap:"8px" }}>
+              <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key==="Enter" && send(input)}
+                placeholder="Pose ta question…" style={{ flex:1, background:"rgba(255,255,255,0.07)", border:`1px solid ${C.cardBorder}`, borderRadius:"22px", padding:"12px 18px", color:C.text, fontSize:"13px", outline:"none" }} />
+              <button onClick={() => send(input)} disabled={!input.trim() || loading} style={{ background: input.trim() && !loading ? C.grad : "rgba(255,255,255,0.06)", border:"none", borderRadius:"50%", width:"44px", height:"44px", flexShrink:0, color: input.trim() && !loading ? "#0b1220" : "rgba(255,255,255,0.2)", fontSize:"16px", cursor: input.trim() && !loading ? "pointer" : "not-allowed" }}>↑</button>
+            </div>
+          </div>
+          <div style={{ height:"70px" }}/>
+        </div>
+      );
+    }
+
+    // ── RÉGLAGES ───────────────────────────────────────────────────────────
+
+    function SettingsModal({ store, onClose, onEditProfile, onReset, onImport, onKeyChange }) {
+      const fileRef = useRef(null);
+      const importFile = (e) => {
+        const f = e.target.files?.[0]; if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try { const data = JSON.parse(reader.result); if (!data.profile) throw new Error(); onImport(data); onClose(); }
+          catch(err) { alert("Fichier de sauvegarde invalide."); }
+        };
+        reader.readAsText(f);
+      };
+      return (
+        <Modal onClose={onClose}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"16px" }}>
+            <div style={{ fontSize:"15px", color:C.accent }}>⚙️ Réglages</div>
+            <Btn onClick={onClose} style={{ padding:"6px 10px" }}>✕</Btn>
+          </div>
+          <SLabel>Conseiller IA</SLabel>
+          <div style={{ marginBottom:"20px" }}><ApiKeyForm onSaved={onKeyChange} /></div>
+          <SLabel>Mon profil</SLabel>
+          <Btn onClick={onEditProfile} style={{ width:"100%", marginBottom:"20px" }}>✏️ Modifier mon profil (la checklist s'adapte)</Btn>
+          <SLabel>Mes données (stockées sur cet appareil uniquement)</SLabel>
+          <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", marginBottom:"20px" }}>
+            <Btn kind="accent" onClick={() => downloadFile(`cap-micro-sauvegarde-${todayISO()}.json`, JSON.stringify(store, null, 2), "application/json")}>⬇ Sauvegarder</Btn>
+            <Btn onClick={() => fileRef.current?.click()}>⬆ Restaurer</Btn>
+            <input ref={fileRef} type="file" accept="application/json" onChange={importFile} style={{ display:"none" }} />
+            <Btn kind="danger" onClick={onReset}>Tout effacer</Btn>
+          </div>
+          <div style={{ fontSize:"11px", color:C.textFaint, lineHeight:"1.7" }}>
+            Règles fiscales et sociales à jour de {REGLES.majLe}. Cap Micro est un outil d'aide à la gestion : il ne remplace pas les sites officiels ni le conseil personnalisé d'un expert-comptable ou d'un avocat. Les formalités restent déposées par toi sur les sites officiels (gratuits).
+          </div>
+        </Modal>
+      );
+    }
+
+    // ── APP ────────────────────────────────────────────────────────────────
+
+    const STORE_KEY = "capmicro_data";
+    const EMPTY_STORE = { profile:null, steps:{}, entreprise:null, clients:[], docs:[], recettes:[], achats:[], actions:[], messages:[], objectif:"" };
+
+    function loadStore() {
+      try { const v = localStorage.getItem(STORE_KEY); return v ? { ...EMPTY_STORE, ...JSON.parse(v) } : EMPTY_STORE; } catch(e) { return EMPTY_STORE; }
+    }
+
+    const TABS = [
+      { id:"creation",  label:"Démarches", emoji:"🏁" },
+      { id:"factures",  label:"Factures",  emoji:"🧾" },
+      { id:"suivi",     label:"Suivi",     emoji:"📊" },
+      { id:"conseil",   label:"Conseiller",emoji:"💬" },
+    ];
+
+    function App() {
+      const [store, setStore] = useState(loadStore);
+      const [tab, setTab] = useState(() => localStorage.getItem("capmicro_tab") || "creation");
+      const [editingProfile, setEditingProfile] = useState(false);
+      const [settings, setSettings] = useState(false);
+      const [pending, setPending] = useState(null);
+      const [hasKey, setHasKey] = useState(!!localStorage.getItem(KEY_STORAGE));
+
+      const patch = useCallback((changes) => {
+        setStore(prev => {
+          const next = { ...prev, ...changes };
+          try { localStorage.setItem(STORE_KEY, JSON.stringify(next)); } catch(e) { alert("Stockage plein : exporte une sauvegarde depuis les réglages."); }
+          return next;
+        });
+      }, []);
+
+      useEffect(() => { localStorage.setItem("capmicro_tab", tab); window.scrollTo(0,0); }, [tab]);
+
+      const askAdvisor = (question) => { setPending(question); setTab("conseil"); };
+
+      const completeProfile = (p) => {
+        const isFirst = !store.profile;
+        const changes = { profile:p };
+        if (isFirst && p.etat === "creee") {
+          // entreprise déjà créée : on pré-coche les étapes antérieures à l'immatriculation
+          const pre = {};
+          buildChecklist(p).filter(s => s.phase === "preparer" || s.phase === "declarer" || s.id === "a_siret").forEach(s => { pre[s.id] = true; });
+          changes.steps = { ...store.steps, ...pre };
+        }
+        if (!store.entreprise) changes.entreprise = { ...EMPTY_ENT, siret: p.siret || "" };
+        patch(changes);
+        setEditingProfile(false);
+      };
+
+      const reset = () => {
+        if (!confirm("Effacer toutes tes données Cap Micro sur cet appareil (profil, factures, livre des recettes, conversation) ? Pense à faire une sauvegarde avant.")) return;
+        localStorage.removeItem(STORE_KEY);
+        setStore(EMPTY_STORE); setSettings(false); setTab("creation");
+      };
+
+      if (!store.profile || editingProfile) {
+        return <><OnboardingWizard initial={store.profile} onComplete={completeProfile} onCancel={store.profile ? () => setEditingProfile(false) : null} /><InstallBanner /></>;
+      }
+
+      const p = store.profile;
+      const a = activiteOf(p);
+      const common = { profile:p, store, patch, askAdvisor };
+
+      return (
+        <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"Georgia, serif", color:C.text }}>
+          <div style={{ position:"fixed", top:"-15%", right:"-10%", width:"400px", height:"400px", borderRadius:"50%", background:"radial-gradient(circle,rgba(52,211,153,0.07),transparent 70%)", pointerEvents:"none", zIndex:0 }}/>
+          <div style={{ position:"fixed", bottom:"5%", left:"-15%", width:"380px", height:"380px", borderRadius:"50%", background:"radial-gradient(circle,rgba(129,140,248,0.07),transparent 70%)", pointerEvents:"none", zIndex:0 }}/>
+
+          <div className="no-print" style={{ position:"relative", zIndex:1, maxWidth:"680px", margin:"0 auto", padding:"18px 16px calc(env(safe-area-inset-bottom,0px) + 90px)" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"18px" }}>
+              <div>
+                <div style={{ fontSize:"10px", letterSpacing:"3px", color:C.accent3, textTransform:"uppercase" }}>Cap Micro 🚀</div>
+                <div style={{ fontSize:"12px", color:C.textFaint, fontStyle:"italic" }}>{p.prenom} · {a.emoji} {a.label}</div>
+              </div>
+              <button onClick={() => setSettings(true)} aria-label="Réglages" style={{ background:"rgba(255,255,255,0.05)", border:`1px solid ${C.cardBorder}`, borderRadius:"50%", width:"38px", height:"38px", color:C.textDim, fontSize:"16px", cursor:"pointer" }}>⚙️</button>
+            </div>
+
+            <div key={tab} style={{ animation:"fadeIn 0.3s ease" }}>
+              {tab === "creation" && <CreationTab {...common} />}
+              {tab === "factures" && <FacturesTab {...common} />}
+              {tab === "suivi"    && <SuiviTab {...common} />}
+              {tab === "conseil"  && <ConseillerTab {...common} pending={pending} clearPending={() => setPending(null)} onNeedKey={() => setSettings(true)} hasKey={hasKey || !!localStorage.getItem(KEY_STORAGE)} />}
+            </div>
+
+            <div style={{ textAlign:"center", marginTop:"26px", fontSize:"10.5px", color:C.textFaint, lineHeight:"1.7" }}>
+              Règles à jour de {REGLES.majLe} · outil d'aide, ne remplace pas un professionnel du chiffre ou du droit.<br/>
+              <a href="orientation.html" style={{ color:C.textFaint }}>🧭 Boussole</a> · <a href="index.html" style={{ color:C.textFaint }}>✨ Glow Up</a>
+            </div>
+          </div>
+
+          <nav className="no-print" style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:20, background:"rgba(11,18,32,0.97)", borderTop:`1px solid ${C.cardBorder}`, paddingBottom:"env(safe-area-inset-bottom, 0px)", backdropFilter:"blur(16px)" }}>
+            <div style={{ maxWidth:"680px", margin:"0 auto", display:"flex" }}>
+              {TABS.map(t => (
+                <button key={t.id} onClick={() => setTab(t.id)} style={{ flex:1, background:"transparent", border:"none", padding:"9px 0 10px", cursor:"pointer", color: tab===t.id ? C.accent : C.textFaint, display:"flex", flexDirection:"column", alignItems:"center", gap:"2px" }}>
+                  <span style={{ fontSize:"19px", filter: tab===t.id ? "none" : "grayscale(0.6)" }}>{t.emoji}</span>
+                  <span style={{ fontSize:"10.5px" }}>{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </nav>
+
+          {settings && <SettingsModal store={store} onClose={() => setSettings(false)} onEditProfile={() => { setSettings(false); setEditingProfile(true); }} onReset={reset}
+            onImport={(data) => patch({ ...EMPTY_STORE, ...data })} onKeyChange={() => setHasKey(!!localStorage.getItem(KEY_STORAGE))} />}
+          <InstallBanner />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
